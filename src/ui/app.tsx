@@ -232,7 +232,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         if (!entry) return true;
         if (entry.isDirectory) {
           wsSvc.toggleExpand(entry.path);
-          wsSvc.refreshTree();
+          // Children lazy-loaded by toggleExpand — no need for full refreshTree
         } else if (entry.path === api.editor.activePath) {
           // Already open — just switch to AUTO mode and focus editor
           modeSvc.setMode('auto');

@@ -70,10 +70,36 @@ export class WorkspaceService implements IWorkspaceService {
       next.delete(path);
     } else {
       next.add(path);
+      // Lazy-load children for this directory if not yet loaded
+      this._loadChildren(path).then(() => this._notify());
     }
     this._expanded = next;
     this._notify();
     return next.has(path);
+  }
+
+  /** Lazily load children for a directory node in the tree. Does NOT notify. */
+  private async _loadChildren(dirPath: string): Promise<void> {
+    const node = this._findNode(this._tree, dirPath);
+    if (node && node.isDirectory && !node.children) {
+      try {
+        node.children = await this._vfs.listDir(dirPath);
+      } catch (e: any) {
+        elog(`WorkspaceService._loadChildren ${dirPath}: ${e.message}`);
+      }
+    }
+  }
+
+  /** Recursively find a node by path in the tree. */
+  private _findNode(nodes: FileEntry[], target: string): FileEntry | null {
+    for (const n of nodes) {
+      if (n.path === target) return n;
+      if (n.children) {
+        const found = this._findNode(n.children, target);
+        if (found) return found;
+      }
+    }
+    return null;
   }
 
   async refreshTree(): Promise<FileEntry[]> {
@@ -83,6 +109,15 @@ export class WorkspaceService implements IWorkspaceService {
       elog(`WorkspaceService.refreshTree: ${e.message}`);
       this._tree = [];
     }
+
+    // Re-expand directories that were expanded before refresh
+    if (this._expanded.size > 1) { // >1 because '/' is always there
+      const dirs = [...this._expanded].filter(d => d !== '/');
+      for (const dir of dirs) {
+        await this._loadChildren(dir);
+      }
+    }
+
     this._notify();
 
     try {

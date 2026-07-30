@@ -2,7 +2,7 @@
  * WorkspaceFileService — real filesystem backed by a base directory.
  */
 import { promises as fs } from 'node:fs';
-import { existsSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import type { FileEntry } from '../../types/index.js';
 import type { IFileService } from './ifile-service.js';
@@ -86,7 +86,7 @@ export class WorkspaceFileService implements IFileService {
     return SEP + resolved.join(SEP);
   }
 
-  // ── Tree building (recursive, like VirtualFileSystem) ─
+  // ── Tree building (lazy — children loaded on expand) ─
 
   async listDir(dirPath: string): Promise<FileEntry[]> {
     const absPath = this.abs(dirPath);
@@ -95,43 +95,15 @@ export class WorkspaceFileService implements IFileService {
     for (const d of entries) {
       if (d.name.startsWith('.')) continue; // skip hidden
       const childPath = dirPath === '/' ? `/${d.name}` : `${dirPath}/${d.name}`;
-      const entry: FileEntry = {
+      result.push({
         name: d.name,
         path: childPath,
         isDirectory: d.isDirectory(),
-      };
-      if (d.isDirectory()) {
-        entry.children = await this._listChildren(childPath);
-      }
-      result.push(entry);
+        // children NOT populated — lazy loaded on expand
+      });
     }
     result.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
     return result;
-  }
-
-  private async _listChildren(parentPath: string): Promise<FileEntry[]> {
-    try {
-      const absPath = this.abs(parentPath);
-      const entries = await fs.readdir(absPath, { withFileTypes: true });
-      const result: FileEntry[] = [];
-      for (const d of entries) {
-        if (d.name.startsWith('.')) continue;
-        const childPath = `${parentPath}/${d.name}`;
-        const entry: FileEntry = {
-          name: d.name,
-          path: childPath,
-          isDirectory: d.isDirectory(),
-        };
-        if (d.isDirectory()) {
-          entry.children = await this._listChildren(childPath);
-        }
-        result.push(entry);
-      }
-      result.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
-      return result;
-    } catch {
-      return [];
-    }
   }
 
   // ── File operations ─────────────────────────────────

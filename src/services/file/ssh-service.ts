@@ -127,40 +127,11 @@ export class SSHFileService implements IFileService {
       if (!name) continue;
       const isDir = line.endsWith('/');
       const childPath = dirPath === '/' ? `/${name}` : `${dirPath}/${name}`;
-      const entry: FileEntry = { name, path: childPath, isDirectory: isDir };
-      if (isDir) {
-        entry.children = await this._listChildren(childPath);
-      }
-      entries.push(entry);
+      entries.push({ name, path: childPath, isDirectory: isDir });
+      // children NOT populated — lazy loaded on expand
     }
     entries.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
     return entries;
-  }
-
-  private async _listChildren(parentPath: string): Promise<FileEntry[]> {
-    try {
-      const remotePath = this._remote(parentPath);
-      const result = await this._ssh.execCommand(
-        `ls -1pA ${shEscape(remotePath)} 2>/dev/null | sort`,
-      );
-      const out = String(result.stdout ?? '');
-      const entries: FileEntry[] = [];
-      for (const line of out.trim().split('\n')) {
-        const name = line.replace(/\/$/, '');
-        if (!name) continue;
-        const isDir = line.endsWith('/');
-        const childPath = `${parentPath}/${name}`;
-        const entry: FileEntry = { name, path: childPath, isDirectory: isDir };
-        if (isDir) {
-          entry.children = await this._listChildren(childPath);
-        }
-        entries.push(entry);
-      }
-      entries.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
-      return entries;
-    } catch {
-      return [];
-    }
   }
 
   // ── File read / write ─────────────────────────────

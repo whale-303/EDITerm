@@ -14,7 +14,7 @@ export interface IFileService {
   /** Resolve path segments into an absolute virtual path. */
   resolve(...segments: string[]): string;
 
-  /** List directory contents (recursive — children populated). */
+  /** List directory contents (single level — children NOT populated, lazy-loaded on expand). */
   listDir(dirPath: string): Promise<FileEntry[]>;
 
   /** Read file content as UTF-8. */

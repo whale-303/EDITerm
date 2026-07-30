@@ -36,7 +36,7 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
   const handleSelectFile = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) {
       ws.toggleExpand(entry.path);
-      ws.refreshTree();
+      // Children lazy-loaded by toggleExpand — no need for full refreshTree
       return;
     }
     // If same file, skip
