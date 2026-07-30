@@ -59,25 +59,25 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
   const visualAnchor = useRef<{ row: number; col: number } | null>(null);
 
-  // Track activePath to distinguish "file loaded" from "user edited".
-  // When activePath changes, content is being loaded (from disk or cache)
-  // — NOT a user edit, so skip dirty marking.
-  const prevActivePathRef = useRef(editorSvc.activePath);
-
+  // Compare current content against the loadedContent baseline.
+  // Dirty = content differs from what was loaded from disk (or last saved).
+  // This judges by actual content change, not by whether a file was "opened".
   useEffect(() => {
     const path = editorSvc.activePath;
+    if (!path || focusSvc.current !== 'editor') return;
 
-    // Active path changed → content was loaded (not user edit) → skip
-    if (path !== prevActivePathRef.current) {
-      prevActivePathRef.current = path;
+    const current = contentRef.current.join('\n');
+    const loaded = editorSvc.getLoadedContent(path);
+
+    // Content matches baseline → file is clean
+    if (loaded !== undefined && loaded === current) {
+      if (editorSvc.isDirty(path)) {
+        editorSvc.markClean(path);
+      }
       return;
     }
 
-    // No active file or focus not on editor → skip
-    if (!path || focusSvc.current !== 'editor') return;
-
-    // Content changed while activePath stayed the same → user edited
-    const current = contentRef.current.join('\n');
+    // Content differs from baseline (or no baseline exists) → file is dirty
     if (!editorSvc.isDirty(path)) {
       editorSvc.markDirty(path, current);
     } else {
