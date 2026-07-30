@@ -18,6 +18,10 @@ import type { IWorkspaceService } from '../services/workspace/iworkspace-service
 import type { FileEntry } from '../types/index.js';
 import type { MouseEvent } from '../core/interaction/mouse-protocol.js';
 import { elog } from '../util/error-log.js';
+import { getService } from '../core/di/container.js';
+import type { IExtensionHost } from '../core/extensions/extension-host.js';
+import { resolve } from 'node:path';
+import { readdirSync, existsSync } from 'node:fs';
 
 // ── Constants ─────────────────────────────────────────
 
@@ -55,6 +59,21 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   useEffect(() => {
     registerAllCommands(api);
   }, [api]);
+
+  // ── Load extensions ────────────────────────────
+  useEffect(() => {
+    const extHost = getService<IExtensionHost>(TOKENS.ExtensionHost);
+    const extDir = resolve(process.cwd(), 'extensions');
+    if (existsSync(extDir)) {
+      const dirs = readdirSync(extDir, { withFileTypes: true })
+        .filter(d => d.isDirectory());
+      for (const d of dirs) {
+        extHost.load(resolve(extDir, d.name)).catch(e =>
+          elog(`ext:${d.name}: ${e.message}`)
+        );
+      }
+    }
+  }, []);
 
   // ── Listen for file events → update React state ─
   useEffect(() => {

@@ -1,0 +1,9 @@
+{
+  "name": "editor-stats",
+  "version": "1.0.0",
+  "main": "index.js",
+  "description": "Example EDITerm extension: tracks editor statistics",
+  "contributes": {
+    "commands": []
+  }
+}
