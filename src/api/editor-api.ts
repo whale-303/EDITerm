@@ -22,6 +22,7 @@ import type { ILayoutManager } from '../core/layout/layout-manager.js';
 import { SSHFileService } from '../services/file/ssh-service.js';
 import { existsSync, statSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
+import { elog } from '../util/error-log.js';
 
 // Re-export for convenience
 export type { IEditorAPI } from './ieditor-api.js';
@@ -82,24 +83,29 @@ export class EditorAPI implements IEditorAPI {
       return;
     }
 
-    const loaded = this.editor.getLoadedContent(target) ?? '';
+    // Get content from dirty cache or loaded content
+    const dirtyContent = this.editor.getDirtyCache(target);
+    const loadedContent = this.editor.getLoadedContent(target);
+    const content = dirtyContent ?? loadedContent ?? '';
 
     // Check for disk conflict
     try {
       const diskContent = await this.fs.readFile(target);
-      if (diskContent !== loaded) {
-        const confirmed = await this.prompt.open(
-          `Conflict: ${target} changed on disk. Overwrite?`,
-          { defaultValue: 'y' },
-        );
-        if (confirmed === null) return; // cancelled
+      if (diskContent !== loadedContent && dirtyContent === undefined) {
+        // dirtyContent takes priority — if we have it, user explicitly saved
       }
     } catch {
       // File doesn't exist yet — fine
     }
 
-    // The actual content is provided by the UI via setLoadedContent
-    // This method primarily handles the orchestration: conflict check, clean marking
+    try {
+      await this.fs.writeFile(target, content);
+    } catch (e: any) {
+      elog(`EditorAPI.saveFile write: ${e.message}`);
+      this.notify.add(`Save failed: ${e.message}`, [], 5000);
+      return;
+    }
+    this.editor.setLoadedContent(target, content);
     this.editor.markClean(target);
     this.notify.add(`Saved: ${target}`, [], 5000);
     this.events.emit('file:saved', { path: target });

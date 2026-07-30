@@ -15,6 +15,8 @@ export interface IEditorService {
   readonly activePath: string | null;
 
   // ── Dirty tracking ────────────────────────────
+  /** Set of paths with unsaved changes. */
+  readonly dirtyFiles: ReadonlySet<string>;
   /** Check if a file has unsaved changes. */
   isDirty(path: string): boolean;
   /** Mark a file as clean (content matches disk). */
@@ -103,6 +105,11 @@ export class EditorService implements IEditorService {
   }
 
   // ── Dirty tracking ────────────────────────────────
+
+  get dirtyFiles(): ReadonlySet<string> {
+    // Return a new Set so React detects changes after _notify() triggers re-render
+    return new Set(this._dirtyFiles);
+  }
 
   isDirty(path: string): boolean {
     return this._dirtyFiles.has(path);

@@ -6,7 +6,7 @@ export interface SidebarProps {
   entries: FileEntry[];
   activePath?: string;
   selectedPath?: string;
-  dirtyFiles?: Set<string>;
+  dirtyFiles?: Set<string> | ReadonlySet<string>;
   onSelectFile?: (entry: FileEntry) => void;
   width: number;
   /** Available rows for the tree body (header already subtracted). */
@@ -120,7 +120,7 @@ const FileTreeNode: React.FC<{
   entry: FileEntry;
   activePath?: string;
   selectedPath?: string;
-  dirtyFiles?: Set<string>;
+  dirtyFiles?: Set<string> | ReadonlySet<string>;
   onSelectFile?: (e: FileEntry) => void;
   depth: number;
   maxWidth: number;

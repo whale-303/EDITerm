@@ -15,6 +15,7 @@ import type { IFileService } from '../file/ifile-service.js';
 import type { FileEntry } from '../../types/index.js';
 import type { IWorkspaceService } from './iworkspace-service.js';
 import type { IEventBus } from '../../core/events/event-bus.js';
+import { elog } from '../../util/error-log.js';
 
 const DEFAULT_WORKSPACE = './test_workspace';
 
@@ -78,7 +79,8 @@ export class WorkspaceService implements IWorkspaceService {
   async refreshTree(): Promise<FileEntry[]> {
     try {
       this._tree = await this._vfs.listDir('/');
-    } catch {
+    } catch (e: any) {
+      elog(`WorkspaceService.refreshTree: ${e.message}`);
       this._tree = [];
     }
     this._notify();
@@ -115,7 +117,8 @@ export class WorkspaceService implements IWorkspaceService {
 
     try {
       this._tree = await ssh.listDir('/');
-    } catch {
+    } catch (e: any) {
+      elog(`WorkspaceService.connectSSH: ${e.message}`);
       // Connection failed — revert to local
       this._vfs = new WorkspaceFileService(DEFAULT_WORKSPACE);
       this._tree = await this._vfs.listDir('/');

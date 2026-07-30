@@ -19,6 +19,7 @@ export interface IModeService {
   tryTransition(key: string): boolean;
   setMode(mode: EditorMode): void;
   onModeChange(fn: ModeChangeListener): () => void;
+  onChange(fn: () => void): () => void;
 }
 
 export class ModeService implements IModeService {
@@ -64,6 +65,11 @@ export class ModeService implements IModeService {
 
   onModeChange(fn: ModeChangeListener): () => void {
     return this.inner.onModeChange(fn);
+  }
+
+  /** Generic onChange for React useService hook (re-uses ModeManager listeners). */
+  onChange(fn: () => void): () => void {
+    return this.inner.onModeChange(() => fn());
   }
 }
 

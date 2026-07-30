@@ -15,6 +15,9 @@ export interface IPromptService {
   /** Close the current prompt (same as cancel). */
   close(): void;
 
+  /** Confirm the prompt with the given value (called by input handler). */
+  confirm(value: string): void;
+
   /** Whether a prompt is currently displayed. */
   readonly isOpen: boolean;
 
