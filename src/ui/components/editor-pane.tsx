@@ -1,5 +1,8 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { getService } from '../../core/di/container.js';
+import { TOKENS } from '../../core/di/tokens.js';
+import type { ILanguageService, Token } from '../../services/language/ilanguage-service.js';
 import type { SelectionRange } from '../app.js';
 
 interface EditorPaneProps {
@@ -10,11 +13,15 @@ interface EditorPaneProps {
   selection?: SelectionRange | null;
   width: number;
   height: number;
+  /** Language id for syntax highlighting (e.g. "typescript", "python"). */
+  languageId?: string;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
   content, cursorRow, cursorCol, scrollOffset = 0, selection, height,
+  languageId,
 }) => {
+  const langSvc = getService<ILanguageService>(TOKENS.LanguageService);
   const visible = content.slice(scrollOffset, scrollOffset + height);
 
   return (
@@ -31,6 +38,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <SelectedLine line={line} sel={selInfo} isCursorRow={isCursorRow} cursorCol={cursorCol} />
             ) : isCursorRow ? (
               <CursorLine line={line} cursorCol={cursorCol} />
+            ) : languageId ? (
+              <HighlightedLine line={line} tokens={langSvc.tokenize(line, languageId)} />
             ) : (
               <Text>{line}</Text>
             )}
@@ -85,6 +94,34 @@ function getSelectionForLine(
 }
 
 // ── Line renderers ────────────────────────────────────
+
+/** Render a line with syntax-highlighted tokens. */
+const HighlightedLine: React.FC<{ line: string; tokens: Token[] }> = ({ line, tokens }) => {
+  if (tokens.length === 0) return <Text>{line}</Text>;
+
+  const segments: Array<{ text: string; color?: string }> = [];
+  let pos = 0;
+  for (const t of tokens) {
+    if (t.start > pos) {
+      segments.push({ text: line.slice(pos, t.start) }); // uncolored text between tokens
+    }
+    segments.push({ text: line.slice(t.start, t.end), color: t.color });
+    pos = t.end;
+  }
+  if (pos < line.length) {
+    segments.push({ text: line.slice(pos) }); // remaining uncolored text
+  }
+
+  return (
+    <Box>
+      {segments.map((seg, i) =>
+        seg.color
+          ? <Text key={i} color={seg.color}>{seg.text}</Text>
+          : <Text key={i}>{seg.text}</Text>
+      )}
+    </Box>
+  );
+};
 
 const CursorLine: React.FC<{ line: string; cursorCol: number }> = ({ line, cursorCol }) => (
   <Box>

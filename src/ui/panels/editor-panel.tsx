@@ -10,9 +10,12 @@ import { EditorPane } from '../components/editor-pane.js';
 import { useService } from '../hooks/use-service.js';
 import { useEditorAPI } from '../hooks/use-service.js';
 import { TOKENS } from '../../core/di/tokens.js';
+import { getService } from '../../core/di/container.js';
 import type { IEditorService } from '../../core/editor/editor-service.js';
 import type { IFocusService } from '../../services/focus/ifocus-service.js';
 import type { IModeService } from '../../core/interaction/mode-service.js';
+import type { ILanguageService } from '../../services/language/ilanguage-service.js';
+import type { ICompletionService } from '../../services/completion/icompletion-service.js';
 import type { EditorMode, VimSubMode } from '../../core/interaction/mode-manager.js';
 import type { SelectionRange } from '../app.js';
 import type { Key, InputHandlerFn } from '../hooks/input-stack.js';
@@ -60,7 +63,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   const visualAnchor = useRef<{ row: number; col: number } | null>(null);
 
   // Dirty marker — called explicitly by edit handlers, NOT passively by useEffect.
-  // This guarantees dirty is only set when the user actually edits, never on file load.
   const markDirtyRef = useRef<() => void>(() => {});
   markDirtyRef.current = () => {
     const path = editorSvc.activePath;
@@ -72,6 +74,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       editorSvc.setDirtyCache(path, current);
     }
   };
+
+  // Language config refs (for auto-pair / indent in handlers)
+  const langSvc = getService<ILanguageService>(TOKENS.LanguageService);
+  const langRef = useRef(langSvc.detect(editorSvc.activePath ?? ''));
+  langRef.current = langSvc.detect(editorSvc.activePath ?? '');
+
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   // When content matches loadedContent, the file is clean.
   // This catches the case where user undoes all changes back to baseline.
@@ -92,6 +102,18 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       // Only handle when focus is on editor
       if (focusSvc.current !== 'editor') return false;
 
+      // Ctrl+Space → trigger completion
+      if (_input === '\x00') {
+        const path = editorSvc.activePath;
+        if (path) {
+          const compSvc = getService<ICompletionService>(TOKENS.CompletionService);
+          const line = contentRef.current[cursorRef.current.row] ?? '';
+          const prefix = line.slice(0, cursorRef.current.col).match(/[a-zA-Z_]\w*$/)?.[0] ?? '';
+          compSvc.open(prefix, contentRef.current.join('\n'));
+        }
+        return true;
+      }
+
       // ESC — let mode-transition handler deal with it
       if (key.escape) return false;
 
@@ -100,7 +122,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       // AUTO mode
       if (mm.mode === 'auto') {
         setSelection(null);
-        handleAutoMode(_input, key, contentRef.current, cursorRef.current, setContent, setCursor, markDirtyRef);
+        handleAutoMode(
+          _input, key, contentRef.current, cursorRef.current,
+          setContent, setCursor, markDirtyRef, selectionRef,
+          langRef.current.autoPairs, langRef.current.autoQuotes,
+          langSvc.indentString(langRef.current.id),
+        );
         return true;
       }
 
@@ -123,7 +150,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             break;
           case 'insert':
             setSelection(null);
-            handleInsert(_input, key, contentRef.current, cursorRef.current, setContent, setCursor, markDirtyRef);
+            handleInsert(
+              _input, key, contentRef.current, cursorRef.current,
+              setContent, setCursor, markDirtyRef, selectionRef.current,
+              langRef.current.autoPairs, langRef.current.autoQuotes,
+              langSvc.indentString(langRef.current.id),
+            );
             break;
           case 'visual':
           case 'visual-line':
@@ -148,6 +180,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     return () => onUnregisterHandler('editor');
   }, [editorHeight, setContent, setCursor, setScrollOffset, setSelection, onRegisterHandler, onUnregisterHandler]);
 
+  // Language id for syntax highlighting
+  const languageId = editorSvc.activePath ? langSvc.detect(editorSvc.activePath).id : undefined;
+
   return (
     <Box flexDirection="column" flexGrow={1}>
       <EditorPane
@@ -158,6 +193,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         selection={selection}
         width={editorWidth}
         height={editorHeight}
+        languageId={languageId}
       />
     </Box>
   );
@@ -187,6 +223,10 @@ function handleAutoMode(
   setContent: React.Dispatch<React.SetStateAction<string[]>>,
   setCursor: React.Dispatch<React.SetStateAction<{ row: number; col: number }>>,
   markDirtyRef: React.MutableRefObject<() => void>,
+  selectionRef: React.MutableRefObject<SelectionRange | null>,
+  autoPairs: Array<{ open: string; close: string }>,
+  autoQuotes: string[],
+  indentString: string,
 ): void {
   if (key.upArrow)    { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return; }
   if (key.downArrow)  { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return; }
@@ -196,7 +236,7 @@ function handleAutoMode(
   if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF') { setCursor((c) => ({ ...c, col: content[c.row]?.length ?? 0 })); return; }
   if (input === '\x1b[5~') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 10) })); return; }
   if (input === '\x1b[6~') { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 10) })); return; }
-  handleInsert(input, key, content, cursor, setContent, setCursor, markDirtyRef);
+  handleInsert(input, key, content, cursor, setContent, setCursor, markDirtyRef, selectionRef.current, autoPairs, autoQuotes, indentString);
 }
 
 // ── VIM normal ─────────────────────────────────────
@@ -275,7 +315,57 @@ function handleInsert(
   setContent: React.Dispatch<React.SetStateAction<string[]>>,
   setCursor: React.Dispatch<React.SetStateAction<{ row: number; col: number }>>,
   markDirtyRef: React.MutableRefObject<() => void>,
+  selection: SelectionRange | null,
+  autoPairs: Array<{ open: string; close: string }>,
+  autoQuotes: string[],
+  indentString: string,
 ): void {
+  // ── Tab / Shift+Tab indentation ────────────────
+  if (input === '\t' && !key.return && !key.backspace && !key.delete) {
+    if (selection) {
+      // Indent selected lines
+      setContent((prev) => {
+        const lines = [...prev];
+        for (let r = selection.startRow; r <= selection.endRow; r++) {
+          lines[r] = indentString + lines[r];
+        }
+        return lines;
+      });
+    } else {
+      setContent((prev) => {
+        const lines = [...prev];
+        lines[cursor.row] = indentString + lines[cursor.row];
+        return lines;
+      });
+      setCursor((c) => ({ ...c, col: c.col + indentString.length }));
+    }
+    markDirtyRef.current();
+    return;
+  }
+
+  // Shift+Tab — outdent
+  if (input === '\x1b[Z') {
+    if (selection) {
+      setContent((prev) => {
+        const lines = [...prev];
+        for (let r = selection.startRow; r <= selection.endRow; r++) {
+          lines[r] = unindentLine(lines[r], indentString);
+        }
+        return lines;
+      });
+    } else {
+      setContent((prev) => {
+        const lines = [...prev];
+        const removed = unindentCount(lines[cursor.row], indentString);
+        lines[cursor.row] = unindentLine(lines[cursor.row], indentString);
+        return lines;
+      });
+      setCursor((c) => ({ ...c, col: Math.max(0, c.col - unindentCount(content[cursor.row], indentString)) }));
+    }
+    markDirtyRef.current();
+    return;
+  }
+
   setContent((prev) => {
     const lines = [...prev];
     const line = lines[cursor.row];
@@ -289,7 +379,15 @@ function handleInsert(
     }
     if (key.backspace) {
       if (cursor.col > 0) {
-        lines[cursor.row] = line.slice(0, cursor.col - 1) + line.slice(cursor.col);
+        // Check for paired bracket deletion
+        const before = line[cursor.col - 1];
+        const after = line[cursor.col];
+        const pair = autoPairs.find(p => p.open === before && p.close === after);
+        if (pair) {
+          lines[cursor.row] = line.slice(0, cursor.col - 1) + line.slice(cursor.col + 1);
+        } else {
+          lines[cursor.row] = line.slice(0, cursor.col - 1) + line.slice(cursor.col);
+        }
         setCursor((c) => ({ ...c, col: c.col - 1 }));
       } else if (cursor.row > 0) {
         const prevLen = lines[cursor.row - 1].length;
@@ -318,14 +416,60 @@ function handleInsert(
         const lastPart = parts[parts.length - 1];
         setCursor((c) => ({ row: c.row + parts.length - 1, col: lastPart.length }));
       } else {
-        lines[cursor.row] = line.slice(0, cursor.col) + input + line.slice(cursor.col);
-        setCursor((c) => ({ ...c, col: c.col + input.length }));
+        // ── Bracket / quote auto-closing ──────────
+        const nextChar = line[cursor.col] ?? '';
+        const bracketPair = autoPairs.find(p => p.open === input);
+
+        if (bracketPair) {
+          const wrapping = cursor.col < line.length && nextChar !== bracketPair.close && nextChar !== ' ';
+          if (wrapping) {
+            // Wrap next character: `(|h` → `(|h)`
+            lines[cursor.row] = line.slice(0, cursor.col) + input + line.slice(cursor.col);
+          } else {
+            // Insert pair: `|` → `(|)`
+            lines[cursor.row] = line.slice(0, cursor.col) + bracketPair.open + bracketPair.close + line.slice(cursor.col);
+          }
+          setCursor((c) => ({ ...c, col: c.col + 1 }));
+        } else if (autoQuotes.includes(input)) {
+          // Smart quote: skip if next char is the same quote
+          if (nextChar === input) {
+            setCursor((c) => ({ ...c, col: c.col + 1 }));
+            return lines; // just skip cursor, don't modify content
+          }
+          // Insert pair: `|` → `"|"`
+          lines[cursor.row] = line.slice(0, cursor.col) + input + input + line.slice(cursor.col);
+          setCursor((c) => ({ ...c, col: c.col + 1 }));
+        } else {
+          // Regular character insertion
+          lines[cursor.row] = line.slice(0, cursor.col) + input + line.slice(cursor.col);
+          setCursor((c) => ({ ...c, col: c.col + input.length }));
+        }
       }
     }
     return lines;
   });
-  // Only mark dirty for actual content-modifying keystrokes
   if (key.return || key.backspace || key.delete || (input && input.length >= 1)) {
     markDirtyRef.current();
   }
+}
+
+/** Remove one indent level from the beginning of a line. */
+function unindentLine(line: string, indentStr: string): string {
+  if (indentStr === '\t') {
+    return line.startsWith('\t') ? line.slice(1) : line;
+  }
+  const size = indentStr.length;
+  let count = 0;
+  while (count < size && line[count] === ' ') count++;
+  const remove = count === 0 ? 0 : count < size ? count : size;
+  return line.slice(remove);
+}
+
+/** Count how many chars would be removed by unindentLine. */
+function unindentCount(line: string, indentStr: string): number {
+  if (indentStr === '\t') return line.startsWith('\t') ? 1 : 0;
+  const size = indentStr.length;
+  let count = 0;
+  while (count < size && line[count] === ' ') count++;
+  return count === 0 ? 0 : count < size ? count : size;
 }

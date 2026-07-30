@@ -15,6 +15,7 @@ import type { IMenuService } from '../services/menu/imenu-service.js';
 import type { INotifyService } from '../services/notify/inotify-service.js';
 import type { IPromptService } from '../services/prompt/iprompt-service.js';
 import type { IWorkspaceService } from '../services/workspace/iworkspace-service.js';
+import type { ICompletionService } from '../services/completion/icompletion-service.js';
 import type { FileEntry } from '../types/index.js';
 import type { MouseEvent } from '../core/interaction/mouse-protocol.js';
 import { elog } from '../util/error-log.js';
@@ -54,6 +55,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   const notifySvc = useService<INotifyService>(TOKENS.NotifyService);
   const promptSvc = useService<IPromptService>(TOKENS.PromptService);
   const wsSvc = useService<IWorkspaceService>(TOKENS.WorkspaceService);
+  const completionSvc = useService<ICompletionService>(TOKENS.CompletionService);
 
   // ── Register commands ─────────────────────────
   useEffect(() => {
@@ -349,6 +351,54 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
       inputStack.pop('notify');
     }
   }, [notifySvc.hasActionable]);
+
+  // Completion handler
+  useEffect(() => {
+    if (completionSvc.isOpen) {
+      inputStack.push('completion', (_input: string, key: Key) => {
+        if (key.escape) {
+          completionSvc.close();
+          focusSvc.set(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
+          return true;
+        }
+        if (key.upArrow) { completionSvc.moveSelection(-1); return true; }
+        if (key.downArrow) { completionSvc.moveSelection(1); return true; }
+        if (key.return || _input === '\r' || _input === '\t') {
+          const text = completionSvc.accept();
+          if (text) {
+            // Insert the accepted completion text
+            setContent((prev) => {
+              const lines = [...prev];
+              const line = lines[cursor.row];
+              // Find the prefix to replace — backward from cursor
+              let prefixStart = cursor.col;
+              while (prefixStart > 0 && /[a-zA-Z0-9_]/.test(line[prefixStart - 1])) {
+                prefixStart--;
+              }
+              lines[cursor.row] = line.slice(0, prefixStart) + text + line.slice(cursor.col);
+              return lines;
+            });
+            setCursor((c) => {
+              const line = contentRef.current[c.row];
+              let prefixStart = c.col;
+              while (prefixStart > 0 && /[a-zA-Z0-9_]/.test(line[prefixStart - 1])) {
+                prefixStart--;
+              }
+              return { ...c, col: prefixStart + text.length };
+            });
+            // Mark dirty
+            const path = api.editor.activePath;
+            if (path) api.editor.markDirty(path, contentRef.current.join('\n'));
+          }
+          focusSvc.set('editor');
+          return true;
+        }
+        return true; // eat all other keys while completion is open
+      });
+    } else {
+      inputStack.pop('completion');
+    }
+  }, [completionSvc.isOpen]);
 
   // Prompt handler
   const [promptValue, setPromptValue] = useState('');

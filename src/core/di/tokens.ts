@@ -21,6 +21,10 @@ export const TOKENS = {
   // ── api ───────────────────────────────────────
   EditorAPI: Symbol('EditorAPI'),
 
+  // ── language ──────────────────────────────────
+  LanguageService: Symbol('LanguageService'),
+  CompletionService: Symbol('CompletionService'),
+
   // ── services (Phase 2) ────────────────────────
   NotifyService: Symbol('NotifyService'),
   PromptService: Symbol('PromptService'),
