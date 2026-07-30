@@ -18,6 +18,9 @@ export const TOKENS = {
   ThemeService: Symbol('ThemeService'),
   TTSService: Symbol('TTSService'),
 
+  // ── api ───────────────────────────────────────
+  EditorAPI: Symbol('EditorAPI'),
+
   // ── services (Phase 2) ────────────────────────
   NotifyService: Symbol('NotifyService'),
   PromptService: Symbol('PromptService'),
