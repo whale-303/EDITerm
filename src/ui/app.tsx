@@ -207,7 +207,11 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
       if (focusSvc.current !== 'sidebar') return false;
       const flat = flattenTreeWithRoot(treeRef.current, new Set(treeExpandedRef.current));
       let idx = flat.findIndex((e) => e.path === sidebarPathRef.current);
-      if (idx < 0) idx = 0;
+      if (idx < 0) {
+        // Current cursor path no longer exists (e.g. deleted) → reset to root
+        idx = 0;
+        wsSvc.setSidebarPath('/');
+      }
 
       if (key.upArrow || _input === 'k') {
         if (idx > 0) wsSvc.setSidebarPath(flat[idx - 1].path);
@@ -250,6 +254,8 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
             }).catch((e: any) => {
               elog(`sidebar: readFile ${entry.path}: ${e.message}`);
               api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
+              // File no longer exists — reset cursor to root
+              wsSvc.setSidebarPath('/');
             });
           }
           modeSvc.setMode('auto');

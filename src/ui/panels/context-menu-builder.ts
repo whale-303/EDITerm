@@ -45,8 +45,20 @@ export function showContextMenu(
   if (!isDir) {
     items.push({
       key: 'o', label: isActive ? 'Open (already active)' : 'Open',
-      action: () => {
-        if (!isActive) api.openFile(entry.path);
+      action: async () => {
+        if (isActive) return;
+        try {
+          if (!(await fs.exists(entry.path))) {
+            notify.add(`File not found: ${entry.name}`, [], 5000);
+            workspace.setSidebarPath('/');
+            return;
+          }
+          await api.openFile(entry.path);
+        } catch (e: any) {
+          elog(`ctxmenu open ${entry.path}: ${e.message}`);
+          notify.add(`Cannot open: ${e.message}`, [], 5000);
+          workspace.setSidebarPath('/');
+        }
       },
       disabled: isActive,
     });
@@ -58,7 +70,11 @@ export function showContextMenu(
       key: 's', label: 'Save',
       action: async () => {
         try { await api.saveFile(entry.path); }
-        catch (e: any) { elog(`ctxmenu save ${entry.path}: ${e.message}`); }
+        catch (e: any) {
+          elog(`ctxmenu save ${entry.path}: ${e.message}`);
+          notify.add(`Save failed: ${e.message}`, [], 5000);
+          workspace.setSidebarPath('/');
+        }
       },
     });
   }
@@ -72,8 +88,18 @@ export function showContextMenu(
         if (confirm === null) return;
         editor.markClean(entry.path);
         if (isActive) {
-          const text = await fs.readFile(entry.path);
-          editor.setLoadedContent(entry.path, text);
+          try {
+            if (await fs.exists(entry.path)) {
+              const text = await fs.readFile(entry.path);
+              editor.setLoadedContent(entry.path, text);
+            } else {
+              notify.add(`File missing: ${entry.name} — discarding local changes only`, [], 5000);
+              workspace.setSidebarPath('/');
+            }
+          } catch {
+            notify.add(`Cannot reload: ${entry.name}`, [], 5000);
+            workspace.setSidebarPath('/');
+          }
         }
         notify.add(`Discarded: ${entry.name}`, [], 5000);
       },
@@ -125,11 +151,18 @@ export function showContextMenu(
         const name = await prompt.open('New file name');
         if (!name) return;
         const dir = isDir ? entry.path : parentDir;
-        await fs.createFile(dir, name);
+        if (!(await fs.exists(dir))) {
+          notify.add(`Directory no longer exists — creating at root`, [], 5000);
+          workspace.setSidebarPath('/');
+          await fs.createFile('/', name);
+        } else {
+          await fs.createFile(dir, name);
+        }
         await workspace.refreshTree();
         notify.add(`Created: ${name}`, [], 5000);
       } catch (e: any) {
         notify.add(`New file failed: ${e.message}`, [], 5000);
+        workspace.setSidebarPath('/');
       }
     },
   });
@@ -142,11 +175,18 @@ export function showContextMenu(
         const name = await prompt.open('New directory name');
         if (!name) return;
         const dir = isDir ? entry.path : parentDir;
-        await fs.createDirectory(dir, name);
+        if (!(await fs.exists(dir))) {
+          notify.add(`Directory no longer exists — creating at root`, [], 5000);
+          workspace.setSidebarPath('/');
+          await fs.createDirectory('/', name);
+        } else {
+          await fs.createDirectory(dir, name);
+        }
         await workspace.refreshTree();
         notify.add(`Created: ${name}/`, [], 5000);
       } catch (e: any) {
         notify.add(`New directory failed: ${e.message}`, [], 5000);
+        workspace.setSidebarPath('/');
       }
     },
   });
@@ -159,6 +199,11 @@ export function showContextMenu(
     key: 'r', label: 'Rename',
     action: async () => {
       try {
+        if (!(await fs.exists(entry.path))) {
+          notify.add(`File not found: ${entry.name}`, [], 5000);
+          workspace.setSidebarPath('/');
+          return;
+        }
         const newName = await prompt.open('Rename', { defaultValue: entry.name });
         if (!newName || newName === entry.name) return;
         const newPath = await fs.rename(entry.path, newName);
@@ -167,6 +212,7 @@ export function showContextMenu(
         notify.add(`Renamed: ${entry.name} → ${newName}`, [], 5000);
       } catch (e: any) {
         notify.add(`Rename failed: ${e.message}`, [], 5000);
+        workspace.setSidebarPath('/');
       }
     },
   });
@@ -179,6 +225,12 @@ export function showContextMenu(
       const confirm = await prompt.open(`Delete ${entry.name}? [y/N]`);
       if (confirm === null) return;
       try {
+        if (!(await fs.exists(entry.path))) {
+          notify.add(`Already deleted: ${entry.name}`, [], 5000);
+          workspace.setSidebarPath('/');
+          await workspace.refreshTree();
+          return;
+        }
         await fs.delete(entry.path);
         editor.removeTracking(entry.path);
         await workspace.refreshTree();
@@ -186,6 +238,7 @@ export function showContextMenu(
         notify.add(`Deleted: ${entry.name}`, [], 5000);
       } catch (e: any) {
         notify.add(`Delete failed: ${e.message}`, [], 5000);
+        workspace.setSidebarPath('/');
       }
     },
   });
@@ -218,6 +271,12 @@ export function showContextMenu(
       const srcName = fs.baseName(clip.path);
       const destDir = isDir ? entry.path : parentDir;
       try {
+        if (!(await fs.exists(clip.path))) {
+          notify.add(`Source missing: ${srcName}`, [], 5000);
+          clipboard.clear();
+          workspace.setSidebarPath('/');
+          return;
+        }
         await fs.copyEntry(clip.path, destDir);
         if (clip.cut) {
           await fs.delete(clip.path);
@@ -228,6 +287,7 @@ export function showContextMenu(
         notify.add(clip.cut ? `Moved: ${srcName}` : `Copied: ${srcName}`, [], 5000);
       } catch (e: any) {
         notify.add(`Paste failed: ${e.message}`, [], 5000);
+        workspace.setSidebarPath('/');
       }
     },
   });

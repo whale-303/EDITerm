@@ -62,6 +62,8 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
         api.events.emit('file:opened', { path: entry.path });
       }).catch(() => {
         api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
+        // File no longer exists — reset cursor to root
+        ws.setSidebarPath('/');
       });
     }
   }, [api, ws, editor]);
