@@ -59,31 +59,32 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
   const visualAnchor = useRef<{ row: number; col: number } | null>(null);
 
-  // Compare current content against the loadedContent baseline.
-  // Dirty = content differs from what was loaded from disk (or last saved).
-  // This judges by actual content change, not by whether a file was "opened".
-  useEffect(() => {
+  // Dirty marker — called explicitly by edit handlers, NOT passively by useEffect.
+  // This guarantees dirty is only set when the user actually edits, never on file load.
+  const markDirtyRef = useRef<() => void>(() => {});
+  markDirtyRef.current = () => {
     const path = editorSvc.activePath;
-    if (!path || focusSvc.current !== 'editor') return;
-
+    if (!path) return;
     const current = contentRef.current.join('\n');
-    const loaded = editorSvc.getLoadedContent(path);
-
-    // Content matches baseline → file is clean
-    if (loaded !== undefined && loaded === current) {
-      if (editorSvc.isDirty(path)) {
-        editorSvc.markClean(path);
-      }
-      return;
-    }
-
-    // Content differs from baseline (or no baseline exists) → file is dirty
     if (!editorSvc.isDirty(path)) {
       editorSvc.markDirty(path, current);
     } else {
       editorSvc.setDirtyCache(path, current);
     }
-  }, [content, editorSvc, focusSvc]);
+  };
+
+  // When content matches loadedContent, the file is clean.
+  // This catches the case where user undoes all changes back to baseline.
+  useEffect(() => {
+    const path = editorSvc.activePath;
+    if (!path) return;
+    const loaded = editorSvc.getLoadedContent(path);
+    if (loaded === undefined) return;
+    const current = contentRef.current.join('\n');
+    if (loaded === current && editorSvc.isDirty(path)) {
+      editorSvc.markClean(path);
+    }
+  }, [content, editorSvc]);
 
   // Register editor input handler (AUTO / VIM modes)
   useEffect(() => {
@@ -99,7 +100,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       // AUTO mode
       if (mm.mode === 'auto') {
         setSelection(null);
-        handleAutoMode(_input, key, contentRef.current, cursorRef.current, setContent, setCursor);
+        handleAutoMode(_input, key, contentRef.current, cursorRef.current, setContent, setCursor, markDirtyRef);
         return true;
       }
 
@@ -122,7 +123,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             break;
           case 'insert':
             setSelection(null);
-            handleInsert(_input, key, contentRef.current, cursorRef.current, setContent, setCursor);
+            handleInsert(_input, key, contentRef.current, cursorRef.current, setContent, setCursor, markDirtyRef);
             break;
           case 'visual':
           case 'visual-line':
@@ -185,6 +186,7 @@ function handleAutoMode(
   content: string[], cursor: { row: number; col: number },
   setContent: React.Dispatch<React.SetStateAction<string[]>>,
   setCursor: React.Dispatch<React.SetStateAction<{ row: number; col: number }>>,
+  markDirtyRef: React.MutableRefObject<() => void>,
 ): void {
   if (key.upArrow)    { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return; }
   if (key.downArrow)  { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return; }
@@ -194,7 +196,7 @@ function handleAutoMode(
   if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF') { setCursor((c) => ({ ...c, col: content[c.row]?.length ?? 0 })); return; }
   if (input === '\x1b[5~') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 10) })); return; }
   if (input === '\x1b[6~') { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 10) })); return; }
-  handleInsert(input, key, content, cursor, setContent, setCursor);
+  handleInsert(input, key, content, cursor, setContent, setCursor, markDirtyRef);
 }
 
 // ── VIM normal ─────────────────────────────────────
@@ -272,6 +274,7 @@ function handleInsert(
   cursor: { row: number; col: number },
   setContent: React.Dispatch<React.SetStateAction<string[]>>,
   setCursor: React.Dispatch<React.SetStateAction<{ row: number; col: number }>>,
+  markDirtyRef: React.MutableRefObject<() => void>,
 ): void {
   setContent((prev) => {
     const lines = [...prev];
@@ -321,4 +324,8 @@ function handleInsert(
     }
     return lines;
   });
+  // Only mark dirty for actual content-modifying keystrokes
+  if (key.return || key.backspace || key.delete || (input && input.length >= 1)) {
+    markDirtyRef.current();
+  }
 }
