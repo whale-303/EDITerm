@@ -94,7 +94,10 @@ export class SSHFileService implements IFileService {
   }
 
   private _remote(p: string): string {
-    return this._remoteRoot + p;
+    // Normalize: ensure exactly one / between root and path
+    const root = this._remoteRoot.replace(/\/+$/, '');
+    const sub = p.replace(/^\/+/, '');
+    return root + '/' + sub;
   }
 
   parentDir(filePath: string): string {
@@ -113,15 +116,14 @@ export class SSHFileService implements IFileService {
   async listDir(dirPath: string): Promise<FileEntry[]> {
     await this._ensureConnected();
     const remotePath = this._remote(dirPath);
-    const { stdout } = await this._ssh.execCommand(
+    const result = await this._ssh.execCommand(
       `ls -1pA ${shEscape(remotePath)} 2>/dev/null | sort`,
-      { encoding: 'utf8' },
     );
-    const out = stdout as string;
+    const out = String(result.stdout ?? '');
 
-    const result: FileEntry[] = [];
+    const entries: FileEntry[] = [];
     for (const line of out.trim().split('\n')) {
-      const name = line.replace(/\/$/, ''); // strip trailing / (dir indicator)
+      const name = line.replace(/\/$/, '');
       if (!name) continue;
       const isDir = line.endsWith('/');
       const childPath = dirPath === '/' ? `/${name}` : `${dirPath}/${name}`;
@@ -129,21 +131,20 @@ export class SSHFileService implements IFileService {
       if (isDir) {
         entry.children = await this._listChildren(childPath);
       }
-      result.push(entry);
+      entries.push(entry);
     }
-    result.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
-    return result;
+    entries.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
+    return entries;
   }
 
   private async _listChildren(parentPath: string): Promise<FileEntry[]> {
     try {
       const remotePath = this._remote(parentPath);
-      const { stdout } = await this._ssh.execCommand(
+      const result = await this._ssh.execCommand(
         `ls -1pA ${shEscape(remotePath)} 2>/dev/null | sort`,
-        { encoding: 'utf8' },
       );
-      const out = stdout as string;
-      const result: FileEntry[] = [];
+      const out = String(result.stdout ?? '');
+      const entries: FileEntry[] = [];
       for (const line of out.trim().split('\n')) {
         const name = line.replace(/\/$/, '');
         if (!name) continue;
@@ -153,10 +154,10 @@ export class SSHFileService implements IFileService {
         if (isDir) {
           entry.children = await this._listChildren(childPath);
         }
-        result.push(entry);
+        entries.push(entry);
       }
-      result.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
-      return result;
+      entries.sort((a, b) => (b.isDirectory ? 1 : 0) - (a.isDirectory ? 1 : 0) || a.name.localeCompare(b.name));
+      return entries;
     } catch {
       return [];
     }
@@ -167,9 +168,9 @@ export class SSHFileService implements IFileService {
   async readFile(filePath: string): Promise<string> {
     await this._ensureConnected();
     const remotePath = this._remote(filePath);
-    const result = await this._ssh.execCommand(`cat -- ${shEscape(remotePath)}`, { encoding: 'utf8' });
-    if (result.code !== 0) throw new Error(result.stderr || 'readFile failed');
-    return result.stdout as string;
+    const result = await this._ssh.execCommand(`cat -- ${shEscape(remotePath)}`);
+    if (result.code !== 0) throw new Error(String(result.stderr || 'readFile failed'));
+    return String(result.stdout ?? '');
   }
 
   async writeFile(filePath: string, content: string): Promise<void> {
@@ -181,7 +182,6 @@ export class SSHFileService implements IFileService {
     // Write via stdin
     await this._ssh.execCommand(`cat > ${shEscape(remotePath)}`, {
       stdin: content,
-      encoding: 'utf8',
     });
   }
 

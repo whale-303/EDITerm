@@ -40,13 +40,20 @@ export type LayoutNode = SplitNode | LeafNode;
 export interface Command {
   id: string;
   label: string;
-  /** vim-style key sequence, e.g. "<C-p>" "<S-f>" */
+  /** Key sequence, e.g. "<C-p>" "s" "F3" "enter". Parsed by keybinding matcher. */
   keybinding?: string;
+  /** Condition expression — command only fires when this evaluates true.
+   *  Examples: "mode==normal", "focus==sidebar", "sidebarPath==/". */
+  when?: string;
   run: (ctx: CommandContext) => void | Promise<void>;
 }
 
 export interface CommandContext {
   args?: unknown[];
+  /** What triggered the command. */
+  source?: 'keyboard' | 'menu' | 'mouse' | 'api';
+  /** Contextual target (e.g. selected file path, active editor). */
+  target?: { path?: string; type?: string };
 }
 
 // ─── Extensions ───────────────────────────────────────

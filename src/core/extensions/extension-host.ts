@@ -9,9 +9,11 @@ import { register, getService } from '../di/container.js';
 import { TOKENS } from '../di/tokens.js';
 import type { ExtensionManifest } from '../../types/index.js';
 import type { ICommandRegistry } from '../commands/command-registry.js';
+import type { IEventBus } from '../events/event-bus.js';
 
 export interface ExtensionAPI {
   commands: ICommandRegistry;
+  events: IEventBus;
 }
 
 export interface IExtensionHost {
@@ -26,6 +28,7 @@ export class ExtensionHost implements IExtensionHost {
   private buildAPI(): ExtensionAPI {
     return {
       commands: getService<ICommandRegistry>(TOKENS.CommandRegistry),
+      events: getService<IEventBus>(TOKENS.EventBus),
     };
   }
 

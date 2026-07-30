@@ -10,9 +10,19 @@ export const TOKENS = {
   CommandRegistry: Symbol('CommandRegistry'),
   KeybindingManager: Symbol('KeybindingManager'),
   ExtensionHost: Symbol('ExtensionHost'),
+  EventBus: Symbol('EventBus'),
+  ModeService: Symbol('ModeService'),
 
   // ── services ──────────────────────────────────
   FileService: Symbol('FileService'),
   ThemeService: Symbol('ThemeService'),
   TTSService: Symbol('TTSService'),
+
+  // ── services (Phase 2) ────────────────────────
+  NotifyService: Symbol('NotifyService'),
+  PromptService: Symbol('PromptService'),
+  FocusService: Symbol('FocusService'),
+  MenuService: Symbol('MenuService'),
+  ClipboardService: Symbol('ClipboardService'),
+  WorkspaceService: Symbol('WorkspaceService'),
 } as const;

@@ -8,6 +8,8 @@ export interface ICommandRegistry {
   execute(id: string, ctx?: CommandContext): Promise<void>;
   getAll(): Command[];
   getById(id: string): Command | undefined;
+  /** Find the first command whose keybinding matches the input string. */
+  findByKeybinding(input: string): Command | undefined;
 }
 
 export class CommandRegistry implements ICommandRegistry {
@@ -36,6 +38,13 @@ export class CommandRegistry implements ICommandRegistry {
 
   getById(id: string): Command | undefined {
     return this.commands.get(id);
+  }
+
+  findByKeybinding(input: string): Command | undefined {
+    for (const cmd of this.commands.values()) {
+      if (cmd.keybinding === input) return cmd;
+    }
+    return undefined;
   }
 }
 
