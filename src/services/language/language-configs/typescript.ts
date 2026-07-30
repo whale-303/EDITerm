@@ -13,8 +13,10 @@ const config: LanguageConfig = {
     { open: '[', close: ']' },
     { open: '{', close: '}' },
     { open: '<', close: '>' },
+    { open: "`", close: "`" },
   ],
   autoQuotes: ['"', "'", '`'],
+  indentTriggers: ['{'],
   completions: [
     // Keywords
     'break', 'case', 'catch', 'class', 'const', 'continue', 'debugger',

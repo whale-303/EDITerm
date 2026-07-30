@@ -75,6 +75,29 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     }
   };
 
+  // Completion auto-trigger — called after word-character insertion.
+  // Computes the word prefix from old content + just-inserted char.
+  const completionSvcRef = useRef(getService<ICompletionService>(TOKENS.CompletionService));
+  completionSvcRef.current = getService<ICompletionService>(TOKENS.CompletionService);
+  const autoTriggerRef = useRef<(ch: string) => void>(() => {});
+  autoTriggerRef.current = (ch: string) => {
+    if (!/[a-zA-Z_]/.test(ch)) return;
+    const line = contentRef.current[cursorRef.current.row] ?? '';
+    const before = line.slice(0, cursorRef.current.col);
+    const prefix = (before + ch).match(/[a-zA-Z_]\w*$/)?.[0] ?? '';
+    if (prefix.length < 3) {
+      if (completionSvcRef.current.isOpen) completionSvcRef.current.close();
+      return;
+    }
+    if (completionSvcRef.current.isOpen) {
+      // Already open — just narrow the filter
+      completionSvcRef.current.refilter(prefix);
+    } else {
+      // First open — index file words and show candidates
+      completionSvcRef.current.open(prefix, contentRef.current.join('\n'));
+    }
+  };
+
   // Language config refs (for auto-pair / indent in handlers)
   const langSvc = getService<ILanguageService>(TOKENS.LanguageService);
   const langRef = useRef(langSvc.detect(editorSvc.activePath ?? ''));
@@ -102,8 +125,11 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       // Only handle when focus is on editor
       if (focusSvc.current !== 'editor') return false;
 
-      // Ctrl+Space → trigger completion
-      if (_input === '\x00') {
+      // Ctrl+Space / Ctrl+P → trigger completion
+      // Check both raw bytes (\x00 = Ctrl+Space, \x10 = Ctrl+P) and the Ink key.ctrl flag
+      // because some terminals pass raw control chars while others set the ctrl flag.
+      if (_input === '\x00' || _input === '\x10' ||
+          (key.ctrl && (_input === ' ' || _input === 'p' || _input === 'P'))) {
         const path = editorSvc.activePath;
         if (path) {
           const compSvc = getService<ICompletionService>(TOKENS.CompletionService);
@@ -127,6 +153,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           setContent, setCursor, markDirtyRef, selectionRef,
           langRef.current.autoPairs, langRef.current.autoQuotes,
           langSvc.indentString(langRef.current.id),
+          langRef.current.indentTriggers,
+          autoTriggerRef.current,
         );
         return true;
       }
@@ -155,6 +183,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               setContent, setCursor, markDirtyRef, selectionRef.current,
               langRef.current.autoPairs, langRef.current.autoQuotes,
               langSvc.indentString(langRef.current.id),
+              langRef.current.indentTriggers,
+              autoTriggerRef.current,
             );
             break;
           case 'visual':
@@ -183,6 +213,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   // Language id for syntax highlighting
   const languageId = editorSvc.activePath ? langSvc.detect(editorSvc.activePath).id : undefined;
 
+  // Completion state — subscribe for React re-renders
+  const completionForRender = useService<ICompletionService>(TOKENS.CompletionService);
+
   return (
     <Box flexDirection="column" flexGrow={1}>
       <EditorPane
@@ -194,6 +227,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         width={editorWidth}
         height={editorHeight}
         languageId={languageId}
+        completionOpen={completionForRender.isOpen}
+        completionItems={completionForRender.items}
+        completionSelected={completionForRender.selectedIndex}
+        completionPrefix={completionForRender.currentPrefix}
       />
     </Box>
   );
@@ -227,6 +264,8 @@ function handleAutoMode(
   autoPairs: Array<{ open: string; close: string }>,
   autoQuotes: string[],
   indentString: string,
+  indentTriggers: string[],
+  onAutoTrigger?: (ch: string) => void,
 ): void {
   if (key.upArrow)    { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return; }
   if (key.downArrow)  { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return; }
@@ -236,7 +275,7 @@ function handleAutoMode(
   if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF') { setCursor((c) => ({ ...c, col: content[c.row]?.length ?? 0 })); return; }
   if (input === '\x1b[5~') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 10) })); return; }
   if (input === '\x1b[6~') { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 10) })); return; }
-  handleInsert(input, key, content, cursor, setContent, setCursor, markDirtyRef, selectionRef.current, autoPairs, autoQuotes, indentString);
+  handleInsert(input, key, content, cursor, setContent, setCursor, markDirtyRef, selectionRef.current, autoPairs, autoQuotes, indentString, indentTriggers, onAutoTrigger);
 }
 
 // ── VIM normal ─────────────────────────────────────
@@ -309,7 +348,7 @@ function moveCursorVisual(
 
 function handleInsert(
   input: string,
-  key: { return: boolean; backspace: boolean; delete: boolean },
+  key: { return: boolean; backspace: boolean; delete: boolean; tab?: boolean; shiftTab?: boolean },
   content: string[],
   cursor: { row: number; col: number },
   setContent: React.Dispatch<React.SetStateAction<string[]>>,
@@ -319,9 +358,11 @@ function handleInsert(
   autoPairs: Array<{ open: string; close: string }>,
   autoQuotes: string[],
   indentString: string,
+  indentTriggers: string[],
+  onAutoTrigger?: (ch: string) => void,
 ): void {
   // ── Tab / Shift+Tab indentation ────────────────
-  if (input === '\t' && !key.return && !key.backspace && !key.delete) {
+  if ((input === '\t' || key.tab) && !key.return && !key.backspace && !key.delete) {
     if (selection) {
       // Indent selected lines
       setContent((prev) => {
@@ -372,9 +413,44 @@ function handleInsert(
     if (line === undefined) return lines;
 
     if (key.return) {
-      lines[cursor.row] = line.slice(0, cursor.col);
-      lines.splice(cursor.row + 1, 0, line.slice(cursor.col));
-      setCursor((c) => ({ row: c.row + 1, col: 0 }));
+      // ── Auto-indent on Enter ───────────────────
+      const leadingWs = (line.match(/^(\s*)/)?.[1] ?? '') as string;
+      const before = line.slice(0, cursor.col);
+      const after = line.slice(cursor.col);
+      const trimmedBefore = before.trimEnd();
+      const afterTrimmed = after.trimStart();
+
+      // Characters that increase indent level after Enter (per language config)
+      const opensBlock = indentTriggers.some(t => trimmedBefore.endsWith(t));
+
+      // Detect block-expand pattern: trigger|close, e.g. {|} for C-style, [|] for JSON
+      const triggerChar = indentTriggers.find(t => trimmedBefore.endsWith(t));
+      const closeChar = triggerChar ? autoPairs.find(p => p.open === triggerChar)?.close : undefined;
+      const afterForBlock = after.trim();
+      const isBlockExpand = opensBlock && closeChar !== undefined &&
+        (afterForBlock === closeChar || afterForBlock.startsWith(closeChar));
+
+      if (isBlockExpand) {
+        // Expand: {|} → {
+        //     |
+        // }
+        const innerIndent = leadingWs + indentString;
+        lines[cursor.row] = before;
+        lines.splice(cursor.row + 1, 0, innerIndent);
+        lines.splice(cursor.row + 2, 0, leadingWs + afterForBlock);
+        setCursor((c) => ({ row: c.row + 1, col: innerIndent.length }));
+      } else if (opensBlock) {
+        // After { or : → indent next line one level deeper
+        const newIndent = leadingWs + indentString;
+        lines[cursor.row] = before;
+        lines.splice(cursor.row + 1, 0, newIndent + afterTrimmed);
+        setCursor((c) => ({ row: c.row + 1, col: newIndent.length }));
+      } else {
+        // Normal Enter — copy leading whitespace from current line
+        lines[cursor.row] = before;
+        lines.splice(cursor.row + 1, 0, leadingWs + afterTrimmed);
+        setCursor((c) => ({ row: c.row + 1, col: leadingWs.length }));
+      }
       return lines;
     }
     if (key.backspace) {
@@ -450,6 +526,10 @@ function handleInsert(
   });
   if (key.return || key.backspace || key.delete || (input && input.length >= 1)) {
     markDirtyRef.current();
+  }
+  // Auto-trigger completion after word character insertion
+  if (onAutoTrigger && input && input.length === 1 && input.charCodeAt(0) >= 0x20) {
+    onAutoTrigger(input);
   }
 }
 

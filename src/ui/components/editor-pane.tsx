@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { ILanguageService, Token } from '../../services/language/ilanguage-service.js';
+import type { CompletionItem } from '../../services/completion/icompletion-service.js';
 import type { SelectionRange } from '../app.js';
 
 interface EditorPaneProps {
@@ -15,11 +16,19 @@ interface EditorPaneProps {
   height: number;
   /** Language id for syntax highlighting (e.g. "typescript", "python"). */
   languageId?: string;
+  /** Completion popup state — rendered as a floating window below the cursor. */
+  completionOpen?: boolean;
+  completionItems?: ReadonlyArray<CompletionItem>;
+  completionSelected?: number;
+  completionPrefix?: string;
 }
+
+const GUTTER_WIDTH = 5; // 4-digit line number + space
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
   content, cursorRow, cursorCol, scrollOffset = 0, selection, height,
   languageId,
+  completionOpen, completionItems, completionSelected = 0, completionPrefix = '',
 }) => {
   const langSvc = getService<ILanguageService>(TOKENS.LanguageService);
   const visible = content.slice(scrollOffset, scrollOffset + height);
@@ -31,7 +40,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
         const isCursorRow = actualRow === cursorRow;
         const selInfo = getSelectionForLine(selection, actualRow, content);
 
-        return (
+        const lineEl = (
           <Box key={actualRow} flexDirection="row">
             <Text dimColor>{String(actualRow + 1).padStart(4, ' ')} </Text>
             {selInfo ? (
@@ -45,6 +54,23 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             )}
           </Box>
         );
+
+        // Render completion popup right after the cursor line
+        if (isCursorRow && completionOpen && completionItems && completionItems.length > 0) {
+          return (
+            <React.Fragment key={actualRow}>
+              {lineEl}
+              <CompletionPopup
+                items={completionItems}
+                prefix={completionPrefix}
+                selectedIndex={completionSelected}
+                indentCol={cursorCol}
+              />
+            </React.Fragment>
+          );
+        }
+
+        return lineEl;
       })}
       {Array.from({ length: Math.max(0, height - visible.length) }).map((_, i) => (
         <Box key={`pad-${i}`} flexDirection="row">
@@ -52,6 +78,42 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           <Text>~</Text>
         </Box>
       ))}
+    </Box>
+  );
+};
+
+// ── Completion popup (floating below cursor) ──────────────
+
+const CompletionPopup: React.FC<{
+  items: ReadonlyArray<CompletionItem>;
+  prefix: string;
+  selectedIndex: number;
+  indentCol: number;
+}> = ({ items, prefix, selectedIndex, indentCol }) => {
+  const marginLeft = GUTTER_WIDTH + indentCol;
+  const shown = items.slice(0, 8);
+
+  return (
+    <Box flexDirection="column" marginLeft={marginLeft}>
+      <Box>
+        <Text dimColor>┌ </Text>
+        <Text color="yellow">{prefix}</Text>
+        <Text dimColor> — ↑↓ nav  Enter/Tab accept  Esc cancel</Text>
+      </Box>
+      {shown.map((item, i) => {
+        const isSelected = i === selectedIndex;
+        return (
+          <Box key={`${item.text}-${i}`}>
+            <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+              {isSelected ? '▶' : ' '} {item.text}
+            </Text>
+            <Text dimColor>  {item.kind}</Text>
+          </Box>
+        );
+      })}
+      {items.length > 8 && (
+        <Text dimColor>  … {items.length - 8} more</Text>
+      )}
     </Box>
   );
 };
@@ -95,43 +157,58 @@ function getSelectionForLine(
 
 // ── Line renderers ────────────────────────────────────
 
-/** Render a line with syntax-highlighted tokens. */
-const HighlightedLine: React.FC<{ line: string; tokens: Token[] }> = ({ line, tokens }) => {
-  if (tokens.length === 0) return <Text>{line}</Text>;
+// ── ANSI helpers — inline color codes avoid multi-Text layout drift ──
 
-  const segments: Array<{ text: string; color?: string }> = [];
+const ANSI_RESET = '\x1b[39m';
+const ANSI_INVERSE = '\x1b[7m';
+const ANSI_INVERSE_OFF = '\x1b[27m';
+
+/** Convert hex color like "#cba6f7" to ANSI true-color foreground sequence. */
+function hexToAnsiFg(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `\x1b[38;2;${r};${g};${b}m`;
+}
+
+/** Build a single string with embedded ANSI color codes from tokens. */
+function colorizeLine(line: string, tokens: Token[]): string {
+  if (tokens.length === 0) return line;
+  const parts: string[] = [];
   let pos = 0;
   for (const t of tokens) {
     if (t.start > pos) {
-      segments.push({ text: line.slice(pos, t.start) }); // uncolored text between tokens
+      parts.push(line.slice(pos, t.start));
     }
-    segments.push({ text: line.slice(t.start, t.end), color: t.color });
+    parts.push(hexToAnsiFg(t.color));
+    parts.push(line.slice(t.start, t.end));
+    parts.push(ANSI_RESET);
     pos = t.end;
   }
   if (pos < line.length) {
-    segments.push({ text: line.slice(pos) }); // remaining uncolored text
+    parts.push(line.slice(pos));
   }
+  return parts.join('');
+}
 
-  return (
-    <Box>
-      {segments.map((seg, i) =>
-        seg.color
-          ? <Text key={i} color={seg.color}>{seg.text}</Text>
-          : <Text key={i}>{seg.text}</Text>
-      )}
-    </Box>
-  );
+// ── Line renderers — each returns a SINGLE <Text> node ──
+
+/** Render a line with syntax-highlighted tokens as inline ANSI. */
+const HighlightedLine: React.FC<{ line: string; tokens: Token[] }> = React.memo(({ line, tokens }) => {
+  const colored = colorizeLine(line, tokens);
+  return <Text>{colored}</Text>;
+});
+
+const CursorLine: React.FC<{ line: string; cursorCol: number }> = ({ line, cursorCol }) => {
+  const c = cursorCol;
+  const text = line.slice(0, c)
+    + ANSI_INVERSE + (line[c] || ' ') + ANSI_INVERSE_OFF
+    + line.slice(c + 1);
+  return <Text>{text}</Text>;
 };
 
-const CursorLine: React.FC<{ line: string; cursorCol: number }> = ({ line, cursorCol }) => (
-  <Box>
-    <Text>{line.slice(0, cursorCol)}</Text>
-    <Text inverse>{line[cursorCol] || ' '}</Text>
-    <Text>{line.slice(cursorCol + 1)}</Text>
-  </Box>
-);
-
-/** Line with selection — cursor may also be on this line. */
+/** Line with selection — cursor may also be on this line.
+ *  Returns a single <Text> with inverse ANSI for the selected range. */
 const SelectedLine: React.FC<{
   line: string; sel: LineSel; isCursorRow: boolean; cursorCol: number;
 }> = ({ line, sel, isCursorRow, cursorCol }) => {
@@ -142,47 +219,32 @@ const SelectedLine: React.FC<{
   const after = line.slice(e);
 
   if (!isCursorRow) {
-    return (
-      <Box>
-        <Text>{before}</Text>
-        <Text inverse>{selected.padEnd(e - s, ' ')}</Text>
-        <Text>{after}</Text>
-      </Box>
-    );
+    return <Text>{before + ANSI_INVERSE + selected.padEnd(e - s, ' ') + ANSI_INVERSE_OFF + after}</Text>;
   }
 
   // Cursor + selection on same line
   const c = cursorCol;
 
   if (c < s) {
-    return (
-      <Box>
-        <Text>{line.slice(0, c)}</Text>
-        <Text inverse>{line[c] || ' '}</Text>
-        <Text>{line.slice(c + 1, s)}</Text>
-        <Text inverse>{selected.padEnd(e - s, ' ')}</Text>
-        <Text>{after}</Text>
-      </Box>
-    );
+    const text = line.slice(0, c)
+      + ANSI_INVERSE + (line[c] || ' ') + ANSI_INVERSE_OFF
+      + line.slice(c + 1, s)
+      + ANSI_INVERSE + selected.padEnd(e - s, ' ') + ANSI_INVERSE_OFF
+      + after;
+    return <Text>{text}</Text>;
   } else if (c < e) {
-    return (
-      <Box>
-        <Text>{before}</Text>
-        <Text inverse>{line.slice(s, c)}</Text>
-        <Text inverse>{line[c] || ' '}</Text>
-        <Text inverse>{line.slice(c + 1, e).padEnd(e - c - 1, ' ')}</Text>
-        <Text>{after}</Text>
-      </Box>
-    );
+    const text = before
+      + ANSI_INVERSE + line.slice(s, c)
+      + line[c]
+      + line.slice(c + 1, e).padEnd(e - c - 1, ' ') + ANSI_INVERSE_OFF
+      + after;
+    return <Text>{text}</Text>;
   } else {
-    return (
-      <Box>
-        <Text>{before}</Text>
-        <Text inverse>{selected.padEnd(e - s, ' ')}</Text>
-        <Text>{line.slice(e, c)}</Text>
-        <Text inverse>{line[c] || ' '}</Text>
-        <Text>{line.slice(c + 1)}</Text>
-      </Box>
-    );
+    const text = before
+      + ANSI_INVERSE + selected.padEnd(e - s, ' ') + ANSI_INVERSE_OFF
+      + line.slice(e, c)
+      + ANSI_INVERSE + (line[c] || ' ') + ANSI_INVERSE_OFF
+      + line.slice(c + 1);
+    return <Text>{text}</Text>;
   }
 };

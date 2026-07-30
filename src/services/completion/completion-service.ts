@@ -13,7 +13,9 @@ const MIN_PREFIX = 2;
 export class CompletionService implements ICompletionService {
   private _open = false;
   private _items: CompletionItem[] = [];
+  private _allCandidates: CompletionItem[] = [];
   private _selected = 0;
+  private _prefix = '';
   private _listeners = new Set<() => void>();
   /** Words indexed from current file. */
   private _wordIndex = new Set<string>();
@@ -21,6 +23,7 @@ export class CompletionService implements ICompletionService {
   get isOpen(): boolean { return this._open; }
   get items(): ReadonlyArray<CompletionItem> { return this._items; }
   get selectedIndex(): number { return this._selected; }
+  get currentPrefix(): string { return this._prefix; }
 
   open(prefix: string, fileContent?: string): void {
     if (prefix.length < MIN_PREFIX) {
@@ -67,9 +70,31 @@ export class CompletionService implements ICompletionService {
       return;
     }
 
+    this._prefix = prefix;
+    this._allCandidates = items;
     this._items = items;
     this._selected = 0;
     this._open = true;
+    this._notify();
+  }
+
+  refilter(prefix: string): void {
+    if (!this._open) return;
+    this._prefix = prefix;
+
+    if (prefix.length < MIN_PREFIX) {
+      this._items = this._allCandidates.slice(0, 10);
+    } else {
+      this._items = this._allCandidates
+        .filter(c => c.text.startsWith(prefix))
+        .slice(0, 10);
+    }
+
+    if (this._items.length === 0) {
+      this.close();
+      return;
+    }
+    this._selected = Math.min(this._selected, this._items.length - 1);
     this._notify();
   }
 

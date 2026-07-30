@@ -10,6 +10,7 @@ const config: LanguageConfig = {
     { open: '[', close: ']' },
   ],
   autoQuotes: ['"'],
+  indentTriggers: ['{', '['],
   completions: ['true', 'false', 'null'],
   tokens: [
     { name: 'string',  pattern: /"(?:[^"\\]|\\.)*"/g,         color: '#a6e3a1', priority: 5 },

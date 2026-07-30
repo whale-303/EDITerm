@@ -13,6 +13,7 @@ const config: LanguageConfig = {
     { open: '_', close: '_' },
   ],
   autoQuotes: ['"', "'"],
+  indentTriggers: [],
   completions: [],
   tokens: [
     { name: 'heading',  pattern: /^#{1,6}\s.*$/gm,              color: '#89b4fa', priority: 10 },

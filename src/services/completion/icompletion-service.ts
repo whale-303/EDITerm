@@ -15,8 +15,11 @@ export interface ICompletionService {
   readonly isOpen: boolean;
   readonly items: ReadonlyArray<CompletionItem>;
   readonly selectedIndex: number;
+  readonly currentPrefix: string;
   /** Open completion popup with candidates matching prefix. */
   open(prefix: string, fileContent?: string): void;
+  /** Re-filter the cached candidates against an updated prefix (no re-index). */
+  refilter(prefix: string): void;
   /** Close the popup and accept the selected candidate. */
   accept(): string | null;
   /** Close without accepting. */

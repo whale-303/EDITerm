@@ -32,15 +32,14 @@ export function registerViewCommands(api: IEditorAPI): void {
     },
   });
 
-  // ── Command Palette (Ctrl+P) ───────────────────
+  // ── Command Palette (F4) ───────────────────
   api.commands.register({
     id: 'view.commandPalette',
     label: 'Command Palette',
-    keybinding: '\x10',             // Ctrl+P
+    keybinding: '\x1b[[D',          // F4 raw sequence
     when: 'global',
     run: () => {
-      // toggle — handled by UI state in Phase 4
-      api.events.emit('before:quit', undefined); // placeholder
+      // Toggled via raw-stdin handler; command registry keybinding is a fallback.
     },
   });
 

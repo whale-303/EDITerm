@@ -1,0 +1,76 @@
+import type { LanguageConfig } from '../ilanguage-service.js';
+
+const config: LanguageConfig = {
+  id: 'rust',
+  extensions: ['.rs'],
+  indentSize: 4,
+  indentUsing: 'spaces',
+  autoPairs: [
+    { open: '(', close: ')' },
+    { open: '[', close: ']' },
+    { open: '{', close: '}' },
+    { open: '<', close: '>' },
+  ],
+  autoQuotes: ['"', "'"],
+  indentTriggers: ['{'],
+  completions: [
+    // Keywords
+    'as', 'async', 'await', 'break', 'const', 'continue', 'crate',
+    'dyn', 'else', 'enum', 'extern', 'false', 'fn', 'for', 'if',
+    'impl', 'in', 'let', 'loop', 'match', 'mod', 'move', 'mut',
+    'pub', 'ref', 'return', 'self', 'Self', 'static', 'struct',
+    'super', 'trait', 'true', 'type', 'unsafe', 'use', 'where',
+    'while', 'yield',
+    // Standard types
+    'bool', 'char', 'i8', 'i16', 'i32', 'i64', 'i128', 'isize',
+    'u8', 'u16', 'u32', 'u64', 'u128', 'usize', 'f32', 'f64',
+    'str', 'String', 'Option', 'Result', 'Some', 'None', 'Ok', 'Err',
+    'Vec', 'Box', 'Rc', 'Arc', 'Cell', 'RefCell', 'Mutex', 'RwLock',
+    'HashMap', 'HashSet', 'BTreeMap', 'BTreeSet', 'LinkedList',
+    'VecDeque', 'BinaryHeap', 'Cow', 'Path', 'PathBuf', 'OsString',
+    'CString', 'CStr', 'Iterator', 'IntoIterator', 'FromIterator',
+    'Clone', 'Copy', 'Drop', 'Default', 'Display', 'Debug',
+    'PartialEq', 'Eq', 'PartialOrd', 'Ord', 'Hash', 'ToString',
+    'From', 'Into', 'TryFrom', 'TryInto', 'AsRef', 'AsMut',
+    'Deref', 'DerefMut', 'Send', 'Sync', 'Sized', 'Unpin',
+    'Fn', 'FnMut', 'FnOnce',
+    // Macros (common)
+    'println!', 'print!', 'format!', 'eprintln!', 'dbg!',
+    'vec!', 'assert!', 'assert_eq!', 'assert_ne!', 'debug_assert!',
+    'panic!', 'todo!', 'unimplemented!', 'unreachable!',
+    'include_str!', 'include_bytes!', 'env!', 'option_env!',
+    'concat!', 'stringify!', 'cfg!', 'column!', 'line!', 'file!',
+    'module_path!', 'compile_error!', 'matches!',
+    // Common methods
+    'unwrap', 'expect', 'unwrap_or', 'unwrap_or_else', 'unwrap_or_default',
+    'map', 'and_then', 'or_else', 'ok_or', 'ok_or_else',
+    'iter', 'into_iter', 'iter_mut', 'collect', 'filter', 'fold',
+    'enumerate', 'len', 'is_empty', 'push', 'pop', 'insert', 'remove',
+    'contains', 'get', 'entry', 'split', 'join', 'trim', 'replace',
+    'to_string', 'to_owned', 'as_str', 'as_bytes', 'as_ref', 'as_mut',
+    'strip_prefix', 'strip_suffix', 'starts_with', 'ends_with',
+    // Attributes
+    'derive', 'allow', 'deny', 'warn', 'inline', 'test',
+    'cfg', 'macro_use', 'macro_export',
+  ],
+  tokens: [
+    { name: 'line-comment',  pattern: /\/\/[!/].*/g,                        color: '#6c7086', priority: 10 },
+    { name: 'line-comment',  pattern: /\/\/.*/g,                            color: '#6c7086', priority: 10 },
+    { name: 'block-comment', pattern: /\/\*[\s\S]*?\*\//g,                  color: '#6c7086', priority: 10 },
+    { name: 'doc-comment',   pattern: /\/\/[!/]\s*(?:#\s*)?\[.*\]/g,        color: '#6c7086', priority: 11 },
+    { name: 'raw-string',    pattern: /r#*(?:")(?:[^"]|"(?!\s*#))*(?:"\s*#)/g, color: '#a6e3a1', priority: 5 },
+    { name: 'string-double', pattern: /\"(?:[^\"\\]|\\.)*\"/g,               color: '#a6e3a1', priority: 5 },
+    { name: 'attribute',     pattern: /#\[[^\]]*\]/g,                        color: '#f9e2af', priority: 7 },
+    { name: 'lifetime',      pattern: /'[a-z_][a-zA-Z0-9_]*\b/g,             color: '#89b4fa', priority: 4 },
+    { name: 'char',          pattern: /'(?:[^'\\]|\\.)'/g,                   color: '#a6e3a1', priority: 5 },
+    { name: 'number-hex',    pattern: /\b0[xX][0-9a-fA-F_]+(?:[uUiIf]\d*)?\b/g, color: '#fab387', priority: 4 },
+    { name: 'number',        pattern: /\b\d[\d_]*(?:\.[\d_]*)?(?:[eE][+-]?\d[\d_]*)?(?:[uUiIf]\d*|usize|isize|f32|f64|u8|u16|u32|u64|u128|i8|i16|i32|i64|i128)?\b/g, color: '#fab387', priority: 4 },
+    { name: 'macro',         pattern: /\b[a-z_]\w*!/g,                        color: '#89b4fa', priority: 3 },
+    { name: 'keyword',       pattern: /\b(?:as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while|yield)\b/g, color: '#cba6f7', priority: 3 },
+    { name: 'type-self',     pattern: /\b(?:Self)\b/g,                        color: '#f9e2af', priority: 5 },
+    { name: 'bool',          pattern: /\b(?:true|false)\b/g,                  color: '#fab387', priority: 3 },
+    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,               color: '#89b4fa', priority: 2 },
+  ],
+};
+
+export default config;

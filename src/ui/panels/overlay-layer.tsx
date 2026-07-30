@@ -15,8 +15,6 @@ import type { INotifyService } from '../../services/notify/inotify-service.js';
 import type { IPromptService } from '../../services/prompt/iprompt-service.js';
 import type { IMenuService } from '../../services/menu/imenu-service.js';
 import type { IFocusService } from '../../services/focus/ifocus-service.js';
-import type { ICompletionService } from '../../services/completion/icompletion-service.js';
-
 export interface OverlayLayerProps {
   cols: number;
   rows: number;
@@ -33,7 +31,6 @@ export const OverlayLayer: React.FC<OverlayLayerProps> = ({
   const prompt = useService<IPromptService>(TOKENS.PromptService);
   const menu = useService<IMenuService>(TOKENS.MenuService);
   const focus = useService<IFocusService>(TOKENS.FocusService);
-  const completion = useService<ICompletionService>(TOKENS.CompletionService);
 
   return (
     <>
@@ -50,27 +47,6 @@ export const OverlayLayer: React.FC<OverlayLayerProps> = ({
         cols={cols}
         focused={focus.current === 'notify'}
       />
-
-      {completion.isOpen && completion.items.length > 0 && (
-        <Box flexDirection="column" marginLeft={4} marginTop={1}>
-          <Box>
-            <Text dimColor>┌─ completions </Text>
-            <Text dimColor>(↑↓ select, Enter/Tab accept, Esc cancel)</Text>
-          </Box>
-          {completion.items.slice(0, 10).map((item, i) => {
-            const isSelected = i === completion.selectedIndex;
-            const prefix = isSelected ? '▶' : ' ';
-            return (
-              <Box key={`${item.text}-${i}`}>
-                <Text color={isSelected ? 'cyan' : undefined}>
-                  {prefix} {item.text}
-                </Text>
-                <Text dimColor>  {item.kind}</Text>
-              </Box>
-            );
-          })}
-        </Box>
-      )}
 
       {prompt.isOpen && prompt.state && (
         <Box flexDirection="row" width={cols} paddingX={1}>

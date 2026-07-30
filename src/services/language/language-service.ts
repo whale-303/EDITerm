@@ -12,6 +12,19 @@ import pyConfig from './language-configs/python.js';
 import jsonConfig from './language-configs/json.js';
 import mdConfig from './language-configs/markdown.js';
 import txtConfig from './language-configs/plaintext.js';
+import yamlConfig from './language-configs/yaml.js';
+import iniConfig from './language-configs/ini.js';
+import javaConfig from './language-configs/java.js';
+import htmlConfig from './language-configs/html.js';
+import cssConfig from './language-configs/css.js';
+import tomlConfig from './language-configs/toml.js';
+import envConfig from './language-configs/env.js';
+import shellConfig from './language-configs/shell.js';
+import csharpConfig from './language-configs/csharp.js';
+import cppConfig from './language-configs/cpp.js';
+import rustConfig from './language-configs/rust.js';
+import propertiesConfig from './language-configs/properties.js';
+import gradleConfig from './language-configs/gradle.js';
 
 export class LanguageService implements ILanguageService {
   private _configs: LanguageConfig[];
@@ -19,7 +32,7 @@ export class LanguageService implements ILanguageService {
   private _byId = new Map<string, LanguageConfig>();
 
   constructor() {
-    this._configs = [tsConfig, pyConfig, jsonConfig, mdConfig, txtConfig];
+    this._configs = [tsConfig, pyConfig, jsonConfig, mdConfig, txtConfig, yamlConfig, iniConfig, javaConfig, htmlConfig, cssConfig, tomlConfig, envConfig, shellConfig, csharpConfig, cppConfig, rustConfig, propertiesConfig, gradleConfig];
     for (const c of this._configs) {
       this._byId.set(c.id, c);
       for (const ext of c.extensions) {

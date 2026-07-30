@@ -11,6 +11,7 @@ const config: LanguageConfig = {
     { open: '{', close: '}' },
   ],
   autoQuotes: ['"', "'"],
+  indentTriggers: [':'],
   completions: [
     'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await',
     'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except',

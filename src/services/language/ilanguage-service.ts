@@ -48,6 +48,8 @@ export interface LanguageConfig {
   indentSize: number;
   /** Use spaces or tabs for indentation. */
   indentUsing: 'spaces' | 'tabs';
+  /** Characters that trigger one extra indent level on Enter (e.g. '{', ':'). */
+  indentTriggers: string[];
   /** Keywords / builtins offered as completions. */
   completions: string[];
 }

@@ -11,6 +11,7 @@ const config: LanguageConfig = {
     { open: '{', close: '}' },
   ],
   autoQuotes: ['"', "'", '`'],
+  indentTriggers: [],
   completions: [],
   tokens: [],
 };

@@ -98,6 +98,9 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
     '', '', '  Welcome to EDITerm!', '',
     '  a/Enter → AUTO  │  v       → VIM',
     '  Esc     → NORMAL (hub)',
+    '  F3      → Cycle Focus',
+    '  F4      → Command Palette',
+    '  Ctrl+P/Space → Completion (↑↓ select, Enter accept)',
   ]);
   const [cursor, setCursor] = useState({ row: 20, col: 2 });
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -111,6 +114,8 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
 
   const contentRef = useRef(content);
   contentRef.current = content;
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
 
   // ── Resize ─────────────────────────────────────
   useEffect(() => {
@@ -122,21 +127,65 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
     return () => { process.stdout.off('resize', onResize); };
   }, []);
 
-  // ── Raw stdin — F3 detection ──────────────────
+  // ── Raw stdin — F3 + Ctrl detection ────────────
+  // Ink's useInput may not receive certain key combinations (F3, Ctrl+Space, Ctrl+P)
+  // depending on terminal. Bypass it by reading raw stdin bytes.
   useEffect(() => {
     let buf = '';
     const handler = (chunk: Buffer | string) => {
       const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
       buf += str;
+
+      // ── Ctrl+Space (\x00) / Ctrl+P (\x10) → code completion ──
+      let cIdx = 0;
+      let hasCtrl = false;
+      while (cIdx < buf.length) {
+        const ch = buf[cIdx];
+        if (ch === '\x00' || ch === '\x10') {
+          hasCtrl = true;
+          // Trigger completion only when editor is focused and no popup is open
+          if (focusSvc.current === 'editor' && !completionSvc.isOpen) {
+            const path = api.editor.activePath;
+            if (path) {
+              const line = contentRef.current[cursorRef.current.row] ?? '';
+              const prefix = line.slice(0, cursorRef.current.col).match(/[a-zA-Z_]\w*$/)?.[0] ?? '';
+              completionSvc.open(prefix, contentRef.current.join('\n'));
+            }
+          }
+          // Remove the byte from buffer so it doesn't accumulate
+          buf = buf.slice(0, cIdx) + buf.slice(cIdx + 1);
+          continue;
+        }
+        cIdx++;
+      }
+      if (hasCtrl) buf = buf.replace(/[\x00\x10]/g, '');
+
+      // ── F3 (\x1b[[C) → cycle focus ──────────────
       let idx = 0;
       while ((idx = buf.indexOf('\x1b[[C', idx)) !== -1) {
         process.stdout.write('\x07');
         focusSvc.cycle();
         idx += 4;
       }
+      // ── F4 (\x1b[[D) → toggle command palette ──
+      idx = 0;
+      while ((idx = buf.indexOf('\x1b[[D', idx)) !== -1) {
+        setShowPalette((prev) => !prev);
+        idx += 4;
+      }
+      // Also detect VT100-style F4 (\x1bOS)
+      if (buf.includes('\x1bOS')) {
+        setShowPalette((prev) => !prev);
+        buf = buf.replace(/\x1bOS/g, '');
+      }
+      // Also detect VT220-style F4 (\x1b[14~)
+      if (buf.includes('\x1b[14~')) {
+        setShowPalette((prev) => !prev);
+        buf = buf.replace(/\x1b\[14~/g, '');
+      }
       if (buf.length > 3) {
         const tail = buf.slice(-3);
-        if (tail.startsWith('\x1b') || '\x1b[[C'.startsWith(tail)) buf = tail;
+        if (tail.startsWith('\x1b') || '\x1b[[C'.startsWith(tail) || '\x1b[[D'.startsWith(tail)) buf = tail;
         else buf = '';
       }
     };
@@ -288,7 +337,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         return true;
       }
       // Tab → cycle dirty files
-      if (_input === '\t') {
+      if (_input === '\t' || key.tab) {
         const dirtyEntries = flat.filter((e) => !e.isDirectory && api.editor.isDirty(e.path));
         if (dirtyEntries.length > 0) {
           let dirtyIdx = dirtyEntries.findIndex((e) => e.path === sidebarPathRef.current);
@@ -363,7 +412,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         }
         if (key.upArrow) { completionSvc.moveSelection(-1); return true; }
         if (key.downArrow) { completionSvc.moveSelection(1); return true; }
-        if (key.return || _input === '\r' || _input === '\t') {
+        if (key.return || _input === '\r' || _input === '\t' || key.tab) {
           const text = completionSvc.accept();
           if (text) {
             // Insert the accepted completion text
@@ -393,7 +442,13 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           focusSvc.set('editor');
           return true;
         }
-        return true; // eat all other keys while completion is open
+        // ── Let typing + editing pass through to the editor ──
+        // Characters, backspace, delete fall through so the editor
+        // updates content, and the auto-trigger re-filters the
+        // completion list on every keystroke.
+        if (_input && _input.length === 1 && _input.charCodeAt(0) >= 0x20) return false;
+        if (key.backspace || key.delete) return false;
+        return true; // eat everything else while completion is open
       });
     } else {
       inputStack.pop('completion');
@@ -455,12 +510,14 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   }, []);
 
   // Register editor handler (from EditorPanel)
+  // Depend on stable push/pop methods, NOT the inputStack object (which is recreated each render).
+  // Otherwise the editor effect re-runs every render, pushing 'editor' above 'completion'.
   const registerHandler = useCallback((id: string, fn: (input: string, key: Key) => boolean) => {
     inputStack.push(id, fn);
-  }, [inputStack]);
+  }, [inputStack.push]);
   const unregisterHandler = useCallback((id: string) => {
     inputStack.pop(id);
-  }, [inputStack]);
+  }, [inputStack.pop]);
 
   // ── useInput dispatch ──────────────────────────
   useInput((input, key) => {

@@ -26,6 +26,8 @@ export interface Key {
   escape: boolean;
   backspace: boolean;
   delete: boolean;
+  tab: boolean;
+  shiftTab: boolean;
   ctrl: boolean;
   shift: boolean;
   meta: boolean;
