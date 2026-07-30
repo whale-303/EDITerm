@@ -1,0 +1,38 @@
+{
+  "name": "editerm",
+  "version": "0.1.0",
+  "description": "A TUI graphical text editor inspired by VSCode — extensible, multi-layout, terminal-native",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": {
+    "editerm": "./dist/main.js"
+  },
+  "scripts": {
+    "dev": "tsx --watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "check": "tsc --noEmit"
+  },
+  "keywords": [
+    "tui",
+    "editor",
+    "terminal",
+    "ink",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ink": "^5.2.0",
+    "ink-text-input": "^6.0.0",
+    "koffi": "^3.1.2",
+    "node-ssh": "^13.2.1",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.31",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

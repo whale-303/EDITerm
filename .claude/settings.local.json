@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init *)",
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(timeout 3 npx tsx src/main.ts)",
+      "Bash(npx tsx *)",
+      "Bash(kill %1)",
+      "Bash(timeout 2 node dist/main.js)",
+      "Bash(node dist/main.js)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(node -e \"import tk from 'terminal-kit'; console.log\\(Object.keys\\(tk\\).slice\\(0,20\\)\\)\")",
+      "Bash(node -e \"import tk from 'terminal-kit'; console.log\\('createTerminal:', typeof tk.createTerminal\\); console.log\\('terminal:', typeof tk.terminal\\); console.log\\('realTerminal:', typeof tk.realTerminal\\)\")",
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"import koffi from 'koffi'; const k = koffi.load\\('kernel32.dll'\\); const fn = k.func\\('int32', 'GetStdHandle', ['int32']\\); console.log\\('ok', fn\\(-10\\)\\)\")",
+      "Bash(node -e \"import koffi from 'koffi'; console.log\\(koffi.version\\)\")",
+      "Bash(node -e \"import koffi from 'koffi'; console.log\\(Object.keys\\(koffi\\).slice\\(0,20\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(npm run *)",
+      "Bash(node -e \"const ns = require\\('node-ssh'\\); console.log\\(Object.getOwnPropertyNames\\(ns.NodeSSH.prototype\\).filter\\(n => n.includes\\('SFTP'\\) || n.includes\\('read'\\) || n.includes\\('dir'\\)\\)\\)\")",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
