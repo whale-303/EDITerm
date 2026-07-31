@@ -17,9 +17,10 @@ import type { FileEntry } from '../../types/index.js';
 export interface SidebarPanelProps {
   width: number;
   editorHeight: number;
+  onScrollChange?: (offset: number) => void;
 }
 
-export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight }) => {
+export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight, onScrollChange }) => {
   const api = useEditorAPI();
   const ws = useService<IWorkspaceService>(TOKENS.WorkspaceService);
   const editor = useService<IEditorService>(TOKENS.EditorService);
@@ -85,6 +86,7 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
       height={Math.max(1, editorHeight - 4)}
       expandedPaths={new Set(ws.expandedPaths)}
       onSelectFile={handleSelectFile}
+      onScrollChange={onScrollChange}
       width={width}
     />
   );

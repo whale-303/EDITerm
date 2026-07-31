@@ -17,6 +17,7 @@ export interface AppShellProps {
   mode: string;
   sidebarWidth: number;
   editorHeight: number;
+  onSidebarScroll?: (offset: number) => void;
   content: string[];
   setContent: React.Dispatch<React.SetStateAction<string[]>>;
   cursor: { row: number; col: number };
@@ -34,7 +35,7 @@ export interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
-  cols, rows, mode, sidebarWidth, editorHeight,
+  cols, rows, mode, sidebarWidth, editorHeight, onSidebarScroll,
   content, setContent, cursor, setCursor,
   scrollOffset, setScrollOffset, selection, setSelection,
   showPalette, onClosePalette, promptValue, promptCursor,
@@ -46,7 +47,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     <Box flexDirection="column" width={cols} height={rows}>
       <Box flexDirection="row" width={cols} height={editorHeight}>
         {mode === 'normal' && (
-          <SidebarPanel width={sidebarWidth} editorHeight={editorHeight} />
+          <SidebarPanel width={sidebarWidth} editorHeight={editorHeight} onScrollChange={onSidebarScroll} />
         )}
         <EditorPanel
           content={content}

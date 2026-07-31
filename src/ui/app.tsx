@@ -13,7 +13,7 @@ import { usePopupFocusManager } from './hooks/use-popup-focus-manager.js';
 import type { ContributionHost } from '../core/contributions/contribution-host.js';
 import type { IModeService } from '../core/interaction/mode-service.js';
 import type { IFocusService } from '../services/focus/ifocus-service.js';
-import type { IMenuService } from '../services/menu/imenu-service.js';
+import type { IMenuService, MenuItem } from '../services/menu/imenu-service.js';
 import type { INotifyService } from '../services/notify/inotify-service.js';
 import type { IPromptService } from '../services/prompt/iprompt-service.js';
 import type { IWorkspaceService } from '../services/workspace/iworkspace-service.js';
@@ -60,6 +60,9 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   const wsSvc = useService<IWorkspaceService>(TOKENS.WorkspaceService);
   const completionSvc = useService<ICompletionService>(TOKENS.CompletionService);
 
+  // Sidebar scroll offset — updated by Sidebar via callback, used for menu Y positioning
+  const sidebarScrollRef = useRef(0);
+
   // ── Register commands ─────────────────────────
   useEffect(() => {
     registerAllCommands(api);
@@ -102,11 +105,13 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
     '  a/Enter → AUTO  │  v       → VIM',
     '  Esc     → NORMAL (hub)',
     '  F3      → Cycle Focus',
-    '  F4      → Command Palette',
+    '  F1      → Command Palette',
     '  Ctrl+P/Space → Completion (↑↓ select, Enter accept)',
   ]);
   const [cursor, setCursor] = useState({ row: 20, col: 2 });
   const [scrollOffset, setScrollOffset] = useState(0);
+  const scrollOffsetRef = useRef(scrollOffset);
+  scrollOffsetRef.current = scrollOffset;
   const [selection, setSelection] = useState<SelectionRange | null>(null);
   const [showPalette, setShowPalette] = useState(false);
 
@@ -170,25 +175,33 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         focusSvc.cycle();
         idx += 4;
       }
-      // ── F4 (\x1b[[D) → toggle command palette ──
-      idx = 0;
-      while ((idx = buf.indexOf('\x1b[[D', idx)) !== -1) {
+      // ── F1 (\x1bOP / \x1b[11~) → toggle command palette ──
+      if (buf.includes('\x1bOP') || buf.includes('\x1b[11~')) {
         setShowPalette((prev) => !prev);
-        idx += 4;
+        buf = buf.replace(/\x1bOP/g, '').replace(/\x1b\[11~/g, '');
       }
-      // Also detect VT100-style F4 (\x1bOS)
-      if (buf.includes('\x1bOS')) {
-        setShowPalette((prev) => !prev);
-        buf = buf.replace(/\x1bOS/g, '');
-      }
-      // Also detect VT220-style F4 (\x1b[14~)
-      if (buf.includes('\x1b[14~')) {
-        setShowPalette((prev) => !prev);
-        buf = buf.replace(/\x1b\[14~/g, '');
+      // ── F4 → editor menu (only when editor focused) ──
+      if (buf.includes('\x1b[[D') || buf.includes('\x1bOS') || buf.includes('\x1b[14~')) {
+        if (focusSvc.current === 'editor') {
+          const termCols = process.stdout.columns || 80;
+          const sidebarW = modeSvc.mode === 'normal' ? Math.max(12, Math.floor(termCols * 0.22)) : 0;
+          const editorW = sidebarW > 0 ? termCols - sidebarW : termCols;
+          const lineLen = contentRef.current[cursorRef.current.row]?.length ?? 0;
+          const clampedCol = Math.min(cursorRef.current.col, lineLen);
+          // Visual column accounts for line wrapping within the editor pane
+          const visualCol = clampedCol % editorW;
+          const x = Math.min(sidebarW + visualCol + 8, termCols - 32);
+          const y = Math.min(cursorRef.current.row - scrollOffsetRef.current, (process.stdout.rows || 24) - 12);
+          const items: MenuItem[] = [
+            { key: 'r', label: 'Return to files', action: () => { modeSvc.setMode('normal'); focusSvc.set('sidebar'); } },
+          ];
+          menuSvc.show(x, y, items);
+        }
+        buf = buf.replace(/\x1b\[\[D/g, '').replace(/\x1bOS/g, '').replace(/\x1b\[14~/g, '');
       }
       if (buf.length > 3) {
         const tail = buf.slice(-3);
-        if (tail.startsWith('\x1b') || '\x1b[[C'.startsWith(tail) || '\x1b[[D'.startsWith(tail)) buf = tail;
+        if (tail.startsWith('\x1b') || '\x1b[[C'.startsWith(tail)) buf = tail;
         else buf = '';
       }
     };
@@ -237,7 +250,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           const flat = flattenTreeWithRoot(wsSvc.tree, new Set(wsSvc.expandedPaths));
           if (sidebarRow < flat.length) {
             const entry = flat[sidebarRow];
-            showContextMenu(entry, Math.min(mouse.col, cols - 32), Math.min(mouse.row, rows - 12), api);
+            showContextMenu(entry, menuXForEntry(entry, sidebarWidth, cols), Math.min(mouse.row, rows - 12), api);
           }
         }
       }
@@ -284,7 +297,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
       }
       if (_input === 'e' || _input === 'E') {
         const entry = flat[idx];
-        if (entry) showContextMenu(entry, cols - 32, Math.min(2 + idx, rows - 12), api);
+        if (entry) showContextMenu(entry, menuXForEntry(entry, sidebarWidth, cols), Math.min(2 + idx - sidebarScrollRef.current, rows - 12), api);
         return true;
       }
       // Enter → open file / toggle expand / switch to open file
@@ -623,6 +636,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         mode={mode}
         sidebarWidth={sidebarWidth}
         editorHeight={editorHeight}
+        onSidebarScroll={(o) => { sidebarScrollRef.current = o; }}
         content={content}
         setContent={setContent}
         cursor={cursor}
@@ -676,4 +690,24 @@ function flattenTreeWithRoot(entries: FileEntry[], expanded: Set<string>): FileE
     flat.push(...flattenTree(entries, expanded));
   }
   return flat;
+}
+
+/** Compute tree depth from entry path: '/' → 0, '/e' → 1, '/e/Projects' → 2. */
+function entryDepth(path: string): number {
+  const cleaned = path.replace(/\/+$/, '');
+  if (cleaned === '' || cleaned === '/') return 0;
+  return cleaned.split('/').filter(Boolean).length;
+}
+
+/**
+ * Compute context-menu x position: 2 columns right of the entry name.
+ * Clamped to [sidebarWidth+1, cols-32] so it neither overlaps the sidebar
+ * nor overflows the terminal.
+ */
+function menuXForEntry(entry: { name: string; path: string }, sidebarWidth: number, cols: number): number {
+  const depth = entryDepth(entry.path);
+  // indent(depth*2) + selectionArrow(2) + icon+spacing(3) + name.length + gap(2)
+  const entryEndCol = 1 + depth * 2 + 2 + 3 + entry.name.length;
+  const x = entryEndCol + 2;
+  return Math.min(Math.max(x, sidebarWidth + 1), cols - 32);
 }

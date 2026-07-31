@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import type { FileEntry } from '../../types/index.js';
 import type { GitFileStatus } from '../../services/git/igit-service.js';
@@ -17,6 +17,8 @@ export interface SidebarProps {
   height: number;
   /** Set of expanded directory paths. */
   expandedPaths?: Set<string>;
+  /** Called when the scroll offset changes (for context menu positioning). */
+  onScrollChange?: (offset: number) => void;
 }
 
 interface FlatNode {
@@ -38,7 +40,7 @@ function flattenTree(entries: FileEntry[], expanded: Set<string>, depth: number)
 
 export const Sidebar: React.FC<SidebarProps> = ({
   entries, activePath, selectedPath, dirtyFiles, gitStatus, onSelectFile,
-  width, height, expandedPaths,
+  width, height, expandedPaths, onScrollChange,
 }) => {
   const expanded = expandedPaths ?? new Set<string>();
 
@@ -84,6 +86,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     prevOffsetRef.current = next;
     return next;
   }, [flat, selectedPath, height]);
+
+  // Expose scroll offset to parent (for context-menu Y positioning)
+  useEffect(() => { onScrollChange?.(scrollOffset); }, [scrollOffset, onScrollChange]);
 
   const visible = flat.slice(scrollOffset, scrollOffset + height);
 
