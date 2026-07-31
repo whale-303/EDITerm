@@ -112,8 +112,8 @@ export function showContextMenu(
     });
   }
 
-  // ── SSH Connect (workspace root directory only) ─
-  if (isDir && entry.path === workspace.basePath) {
+  // ── SSH Connect (root directory only) ──────────
+  if (isDir && entry.path === '/') {
     items.push({
       key: 'h', label: 'SSH Connect',
       action: async () => {

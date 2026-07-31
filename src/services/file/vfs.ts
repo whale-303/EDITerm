@@ -107,7 +107,9 @@ export class VFS implements IFileService {
 
   async readFile(filePath: string): Promise<string> {
     const { provider, relPath } = this._resolve(filePath);
-    return provider.readFile(relPath);
+    const raw = await provider.readFile(relPath);
+    // Normalize CRLF → LF so \r doesn't appear as control character ^M
+    return raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   }
 
   async writeFile(filePath: string, content: string): Promise<void> {

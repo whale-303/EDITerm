@@ -39,7 +39,8 @@ export const NotifyStack: React.FC<NotifyStackProps> = ({ items, maxWidth = 40, 
       // Message lines — split \n into multiple rows
       const messageLines = item.message.split('\n');
       for (let mi = 0; mi < messageLines.length; mi++) {
-        const prefix = mi === 0 ? '⚠ ' : '  ';
+        // const prefix = mi === 0 ? '⚠ ' : '  ';
+        const prefix = '  ';
         items.push({ text: prefix + messageLines[mi] });
       }
 
