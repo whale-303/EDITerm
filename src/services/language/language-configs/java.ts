@@ -36,6 +36,7 @@ const config: LanguageConfig = {
     { name: 'keyword', pattern: /\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|continue|default|do|double|else|enum|extends|final|finally|float|for|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|var|record|sealed|permits)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'type',    pattern: /\b(?:String|boolean|byte|short|int|long|float|double|char|void|Object)\b/g, color: '#89b4fa', priority: 3 },
     { name: 'boolean', pattern: /\b(?:true|false|null)\b/g,          color: '#fab387', priority: 3 },
+    { name: 'class-name', pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g,     color: '#74c7ec', priority: 1 },
   ],
 };
 

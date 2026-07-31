@@ -63,6 +63,24 @@ export function vfsBaseName(vpath: string): string {
   return parts[parts.length - 1] ?? '';
 }
 
+/**
+ * Normalize a VFS path to a canonical form for case-insensitive comparison.
+ *
+ * Lowercases the entire path and normalizes slashes. This is the canonical
+ * key used for Map/Set lookups and `===` comparisons throughout the system.
+ *
+ * Why: Windows NTFS is case-preserving but case-insensitive. Git on Windows
+ * (with core.ignorecase=true) may return paths with different casing than
+ * node:fs. Normalizing to a single canonical form eliminates mismatches.
+ *
+ * On case-sensitive filesystems (Linux/SSH), the original casing is still
+ * used for actual filesystem operations — this function is only for
+ * COMPARISON purposes within the VFS routing and UI layers.
+ */
+export function normalizeVfsPath(vpath: string): string {
+  return vpath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase() || '/';
+}
+
 /** Resolve segments into a VFS path. */
 export function vfsResolve(...segments: string[]): string {
   const joined = segments.join('/').replace(/\\/g, '/');

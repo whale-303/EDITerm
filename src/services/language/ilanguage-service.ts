@@ -25,6 +25,13 @@ export interface TokenRule {
   color: string;
   /** Priority — higher rules win when ranges overlap. */
   priority?: number;
+  /**
+   * Capturing-group index to use for the highlight range (1-indexed).
+   * When set, only the text captured by that group is coloured;
+   * the surrounding match context (e.g. `(` in a function-call pattern)
+   * is left untouched.  Defaults to 0 (whole match).
+   */
+  part?: number;
 }
 
 /** Auto-closing bracket / quote pair. */

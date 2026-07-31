@@ -21,10 +21,11 @@ export interface OverlayLayerProps {
   showPalette: boolean;
   onClosePalette: () => void;
   promptValue: string;
+  promptCursor: number;
 }
 
 export const OverlayLayer: React.FC<OverlayLayerProps> = ({
-  cols, rows, showPalette, onClosePalette, promptValue,
+  cols, rows, showPalette, onClosePalette, promptValue, promptCursor,
 }) => {
   const api = useEditorAPI();
   const notify = useService<INotifyService>(TOKENS.NotifyService);
@@ -51,10 +52,17 @@ export const OverlayLayer: React.FC<OverlayLayerProps> = ({
       {prompt.isOpen && prompt.state && (
         <Box flexDirection="row" width={cols} paddingX={1}>
           <Text bold>{prompt.state.title}: </Text>
-          <Text>{prompt.state.password ? '*'.repeat(promptValue.length) : promptValue}</Text>
-          <Text dimColor>█</Text>
+          {prompt.state.password ? (
+            <Text>{'*'.repeat(promptValue.length)}</Text>
+          ) : (
+            <>
+              <Text>{promptValue.slice(0, promptCursor)}</Text>
+              <Text inverse>{promptValue[promptCursor] || ' '}</Text>
+              <Text>{promptValue.slice(promptCursor + 1)}</Text>
+            </>
+          )}
           <Box marginLeft={2}>
-            <Text dimColor>Enter to confirm, Esc to cancel</Text>
+            <Text dimColor>←→ Move  Enter confirm  Esc cancel</Text>
           </Box>
         </Box>
       )}

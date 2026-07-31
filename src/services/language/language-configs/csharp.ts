@@ -57,7 +57,8 @@ const config: LanguageConfig = {
     { name: 'keyword',       pattern: /\b(?:abstract|as|async|await|base|bool|break|byte|case|catch|char|checked|class|const|continue|decimal|default|delegate|do|double|else|enum|event|explicit|extern|false|finally|fixed|float|for|foreach|goto|if|implicit|in|int|interface|internal|is|lock|long|namespace|new|null|object|operator|out|override|params|private|protected|public|readonly|record|ref|return|sbyte|sealed|short|sizeof|stackalloc|static|string|struct|switch|this|throw|true|try|typeof|uint|ulong|unchecked|unsafe|ushort|using|var|virtual|void|volatile|while|yield)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'type',          pattern: /\b(?:int|long|float|double|decimal|bool|char|string|byte|short|uint|ulong|ushort|sbyte|object|dynamic|var|void)\b/g, color: '#89b4fa', priority: 3 },
     { name: 'bool-null',     pattern: /\b(?:true|false|null)\b/g,          color: '#fab387', priority: 3 },
-    { name: 'function',      pattern: /\b([A-Za-z_]\w*)\s*\(/g,            color: '#89b4fa', priority: 2 },
+    { name: 'function',      pattern: /\b([A-Za-z_]\w*)\s*\(/g,            color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'class-name',   pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g, color: '#74c7ec', priority: 1 },
   ],
 };
 

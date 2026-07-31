@@ -2,6 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import type { FileEntry } from '../../types/index.js';
 import type { GitFileStatus } from '../../services/git/igit-service.js';
+import { normalizeVfsPath } from '../../services/file/path-utils.js';
 
 export interface SidebarProps {
   entries: FileEntry[];
@@ -174,10 +175,12 @@ function lookupGitStatus(
 ): GitFileStatus | undefined {
   if (!statusMap || statusMap.size === 0) return undefined;
 
-  const direct = statusMap.get(entryPath);
+  // Normalize to lowercase for case-insensitive Map key lookup
+  const key = normalizeVfsPath(entryPath);
+  const direct = statusMap.get(key);
   if (direct) return direct;
 
-  let dir = parentDir(entryPath);
+  let dir = parentDir(key);
   while (dir) {
     const s = statusMap.get(dir);
     // Only inherit 'added' from a direct porcelain hit — skip propagated dirs

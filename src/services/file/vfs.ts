@@ -28,7 +28,7 @@ import type { FileEntry } from '../../types/index.js';
 import type { IFileService } from './ifile-service.js';
 import type { IVFSProvider } from './ivfs-provider.js';
 import type { ExecResult } from './ivfs-provider.js';
-import { vfsResolve, vfsParent, vfsBaseName } from './path-utils.js';
+import { vfsResolve, vfsParent, vfsBaseName, normalizeVfsPath } from './path-utils.js';
 
 // ── Mount entry ─────────────────────────────────────
 
@@ -237,11 +237,12 @@ export class VFS implements IFileService {
    * Returns the mount with the longest prefix that matches the path.
    */
   private _findMount(vfsPath: string): MountEntry | null {
-    const normalized = ensureSlash(vfsPath);
+    const normalized = normalizeVfsPath(vfsPath);
     for (const mount of this._mounts) {
+      const mountNorm = normalizeVfsPath(mount.prefix);
       if (mount.prefix === '/') return mount; // root matches everything (last resort due to sort)
-      if (normalized === mount.prefix ||
-          normalized.startsWith(mount.prefix + '/')) {
+      if (normalized === mountNorm ||
+          normalized.startsWith(mountNorm + '/')) {
         return mount;
       }
     }
@@ -269,12 +270,12 @@ register(TOKENS.FileService, () => new VFS());
 
 // ── Internal helpers ────────────────────────────────
 
-/** Normalize a mount path: exactly '/' for root, or '/name/' format. */
+/** Normalize a mount path: exactly '/' for root, or '/name/' format, lowercase. */
 function normalizeMountPath(vfsPath: string): string {
   let p = vfsPath.replace(/\\/g, '/').replace(/\/+/g, '/');
   if (p === '/' || p === '') return '/';
   p = '/' + p.replace(/^\/+/, '').replace(/\/+$/, '');
-  return p;
+  return p.toLowerCase();
 }
 
 /** Ensure a path has a leading slash and no trailing slash. */

@@ -51,7 +51,8 @@ const config: LanguageConfig = {
     // Command substitutions / subshell
     { name: 'subshell', pattern: /\$\([^)]*\)/g,                     color: '#f9e2af', priority: 4 },
     // Function definitions
-    { name: 'function', pattern: /\b([a-zA-Z_]\w*)\s*\(\)/g,         color: '#89b4fa', priority: 2 },
+    { name: 'function', pattern: /\b([a-zA-Z_]\w*)\s*\(\)/g,         color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'class-name', pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g,     color: '#74c7ec', priority: 1 },
   ],
 };
 

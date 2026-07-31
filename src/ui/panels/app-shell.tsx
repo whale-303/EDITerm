@@ -28,6 +28,7 @@ export interface AppShellProps {
   showPalette: boolean;
   onClosePalette: () => void;
   promptValue: string;
+  promptCursor: number;
   onRegisterHandler: (id: string, fn: InputHandlerFn) => void;
   onUnregisterHandler: (id: string) => void;
 }
@@ -36,7 +37,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   cols, rows, mode, sidebarWidth, editorHeight,
   content, setContent, cursor, setCursor,
   scrollOffset, setScrollOffset, selection, setSelection,
-  showPalette, onClosePalette, promptValue,
+  showPalette, onClosePalette, promptValue, promptCursor,
   onRegisterHandler, onUnregisterHandler,
 }) => {
   const editorWidth = mode === 'normal' ? cols - sidebarWidth : cols;
@@ -69,6 +70,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         showPalette={showPalette}
         onClosePalette={onClosePalette}
         promptValue={promptValue}
+        promptCursor={promptCursor}
       />
 
       <StatusBarPanel

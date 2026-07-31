@@ -69,7 +69,8 @@ const config: LanguageConfig = {
     { name: 'keyword',       pattern: /\b(?:as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while|yield)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'type-self',     pattern: /\b(?:Self)\b/g,                        color: '#f9e2af', priority: 5 },
     { name: 'bool',          pattern: /\b(?:true|false)\b/g,                  color: '#fab387', priority: 3 },
-    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,               color: '#89b4fa', priority: 2 },
+    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,               color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'class-name',   pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g,       color: '#74c7ec', priority: 1 },
   ],
 };
 

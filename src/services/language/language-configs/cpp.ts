@@ -67,7 +67,8 @@ const config: LanguageConfig = {
     { name: 'keyword',       pattern: /\b(?:alignas|alignof|auto|bool|break|case|catch|char|char8_t|char16_t|char32_t|class|concept|const|consteval|constexpr|constinit|continue|co_await|co_return|co_yield|decltype|default|delete|do|double|else|enum|explicit|export|extern|false|float|for|friend|goto|if|inline|int|long|mutable|namespace|new|noexcept|nullptr|operator|override|private|protected|public|register|return|short|signed|sizeof|static|static_assert|struct|switch|template|this|thread_local|throw|true|try|typedef|typeid|typename|union|unsigned|using|virtual|void|volatile|wchar_t|while)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'type',          pattern: /\b(?:int|long|float|double|char|bool|short|void|signed|unsigned|size_t|ssize_t|ptrdiff_t|int\d+_t|uint\d+_t|auto)\b/g, color: '#89b4fa', priority: 3 },
     { name: 'bool-null',     pattern: /\b(?:true|false|nullptr|NULL)\b/g,   color: '#fab387', priority: 3 },
-    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,             color: '#89b4fa', priority: 2 },
+    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,             color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'class-name',   pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g,          color: '#74c7ec', priority: 1 },
   ],
 };
 

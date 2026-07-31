@@ -5,7 +5,7 @@ import type { LanguageConfig } from '../ilanguage-service.js';
 
 const config: LanguageConfig = {
   id: 'typescript',
-  extensions: ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'],
+  extensions: ['.ts', '.js', '.mjs', '.cjs'],
   indentSize: 2,
   indentUsing: 'spaces',
   autoPairs: [
@@ -28,7 +28,7 @@ const config: LanguageConfig = {
     'while', 'yield', 'async', 'await', 'from', 'as', 'implements',
     'abstract', 'static', 'readonly', 'declare', 'namespace', 'module',
     'require', 'undefined', 'any', 'never', 'unknown', 'string', 'number',
-    'boolean', 'symbol', 'bigint', 'object',
+    'boolean', 'symbol', 'bigint', 'object', 'constructor',
     // Builtins
     'console', 'Array', 'Object', 'String', 'Number', 'Boolean', 'Map',
     'Set', 'Promise', 'Error', 'Date', 'RegExp', 'Math', 'JSON',
@@ -52,7 +52,9 @@ const config: LanguageConfig = {
     // Booleans / literals
     { name: 'boolean',    pattern: /\b(?:true|false|null|undefined)\b/g, color: '#fab387', priority: 3 },
     // Function calls
-    { name: 'function',    pattern: /\b([a-zA-Z_$]\w*)\s*\(/g,         color: '#89b4fa', priority: 2 },
+    { name: 'function',    pattern: /\b([a-zA-Z_$]\w*)\s*\(/g,         color: '#89b4fa', priority: 2, part: 1 },
+    // PascalCase class / interface / type names
+    { name: 'class-name', pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g, color: '#74c7ec', priority: 1 },
   ],
 };
 

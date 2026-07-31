@@ -69,8 +69,9 @@ const config: LanguageConfig = {
     { name: 'keyword-groovy', pattern: /\b(?:apply|plugins|plugin|buildscript|repositories|dependencies|configurations|allprojects|subprojects|project|ext|task|tasks|settings|include|doFirst|doLast|dependsOn|finalizedBy|mustRunAfter|shouldRunAfter|onlyIf|register|named|getByName|getByPath|configure|withType|import|def|return|if|else|for|in|while|switch|case|break|continue|throw|try|catch|finally|new|true|false|null)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'keyword-kotlin', pattern: /\b(?:val|var|fun|by|lazy|object|import|package|class|interface|enum|data|sealed|open|abstract|override|private|protected|public|internal|companion|const|lateinit|suspend|inline|noinline|crossinline|reified|typealias|init|this|super|return|if|else|when|for|while|do|break|continue|throw|try|catch|finally|true|false|null)\b/g, color: '#cba6f7', priority: 3 },
     { name: 'config-name',   pattern: /\b(?:implementation|api|compileOnly|runtimeOnly|testImplementation|testCompileOnly|testRuntimeOnly|androidTestImplementation|debugImplementation|releaseImplementation|annotationProcessor|kapt|ksp|kaptTest|kspTest|mavenCentral|google|mavenLocal|gradlePluginPortal|jcenter|sourceSets|buildTypes|productFlavors|signingConfigs)\b/g, color: '#89b4fa', priority: 3 },
-    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,             color: '#89b4fa', priority: 2 },
-    { name: 'closure',       pattern: /\b([a-zA-Z_]\w*)\s*\{/g,             color: '#89b4fa', priority: 2 },
+    { name: 'function',      pattern: /\b([a-zA-Z_]\w*)\s*\(/g,             color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'closure',       pattern: /\b([a-zA-Z_]\w*)\s*\{/g,             color: '#89b4fa', priority: 2, part: 1 },
+    { name: 'class-name',   pattern: /\b[A-Z][a-zA-Z0-9_$]+\b/g,          color: '#74c7ec', priority: 1 },
   ],
 };
 

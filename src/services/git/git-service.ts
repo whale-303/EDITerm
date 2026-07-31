@@ -14,6 +14,7 @@ import { register, getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import parseDiff from 'parse-diff';
 import { logger } from '../../util/logger.js';
+import { normalizeVfsPath } from '../file/path-utils.js';
 import type { VFS } from '../file/vfs.js';
 import type { DiffInfo, DiffLineType, GitFileStatus } from './igit-service.js';
 import type { IGitService } from './igit-service.js';
@@ -257,7 +258,9 @@ export class GitService implements IGitService {
   private _repoRelPath(repoRoot: string, absPath: string): string {
     const repoNorm = repoRoot.replace(/\\/g, '/').replace(/\/+$/, '');
     const absNorm = absPath.replace(/\\/g, '/');
-    if (absNorm.startsWith(repoNorm + '/')) {
+    // Case-insensitive comparison — Windows drive letters / path casing may differ
+    // between git rev-parse output and VFS toNativePath
+    if (absNorm.toLowerCase().startsWith(repoNorm.toLowerCase() + '/')) {
       return absNorm.slice(repoNorm.length + 1);
     }
     return absNorm;
@@ -373,15 +376,15 @@ export class GitService implements IGitService {
       if (oldPath && oldPath.startsWith('"') && oldPath.endsWith('"')) {
         oldPath = oldPath.slice(1, -1).replace(/\\"/g, '"');
       }
-      oldPath = oldPath ? `${prefix}/${oldPath}` : undefined;
-      return { path: `${prefix}/${newPath}`, status: 'renamed', oldPath };
+      oldPath = oldPath ? normalizeVfsPath(`${prefix}/${oldPath}`) : undefined;
+      return { path: normalizeVfsPath(`${prefix}/${newPath}`), status: 'renamed', oldPath };
     }
 
     let fpath = line.slice(3);
     if (fpath.startsWith('"') && fpath.endsWith('"')) {
       fpath = fpath.slice(1, -1).replace(/\\"/g, '"');
     }
-    fpath = prefix ? `${prefix}/${fpath}` : `/${fpath}`;
+    fpath = normalizeVfsPath(prefix ? `${prefix}/${fpath}` : `/${fpath}`);
 
     if (wd === 0x3f /* ? */) return { path: fpath, status: 'untracked' };
     if (wd === 0x4d /* M */) return { path: fpath, status: 'modified' };

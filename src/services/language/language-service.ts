@@ -8,6 +8,7 @@ import { register } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { ILanguageService, LanguageConfig, Token } from './ilanguage-service.js';
 import tsConfig from './language-configs/typescript.js';
+import tsxConfig from './language-configs/tsx.js';
 import pyConfig from './language-configs/python.js';
 import jsonConfig from './language-configs/json.js';
 import mdConfig from './language-configs/markdown.js';
@@ -32,7 +33,7 @@ export class LanguageService implements ILanguageService {
   private _byId = new Map<string, LanguageConfig>();
 
   constructor() {
-    this._configs = [tsConfig, pyConfig, jsonConfig, mdConfig, txtConfig, yamlConfig, iniConfig, javaConfig, htmlConfig, cssConfig, tomlConfig, envConfig, shellConfig, csharpConfig, cppConfig, rustConfig, propertiesConfig, gradleConfig];
+    this._configs = [tsConfig, tsxConfig, pyConfig, jsonConfig, mdConfig, txtConfig, yamlConfig, iniConfig, javaConfig, htmlConfig, cssConfig, tomlConfig, envConfig, shellConfig, csharpConfig, cppConfig, rustConfig, propertiesConfig, gradleConfig];
     for (const c of this._configs) {
       this._byId.set(c.id, c);
       for (const ext of c.extensions) {
@@ -73,10 +74,23 @@ export class LanguageService implements ILanguageService {
       const re = new RegExp(rule.pattern.source, rule.pattern.flags);
       let m: RegExpExecArray | null;
       while ((m = re.exec(line)) !== null) {
-        const start = m.index;
-        const end = start + m[0].length;
-        if (start === end) continue; // zero-length match guard
-        matches.push({ start, end, color: rule.color, priority: rule.priority ?? 0 });
+        // When `part` is specified, colour only that capturing group
+        const groupIdx = rule.part ?? 0;
+        if (groupIdx > 0 && (!m[groupIdx] || m[groupIdx].length === 0)) continue;
+        if (groupIdx === 0) {
+          const start = m.index;
+          const end = start + m[0].length;
+          if (start === end) continue;
+          matches.push({ start, end, color: rule.color, priority: rule.priority ?? 0 });
+        } else {
+          // Compute the group's position within the full match
+          const groupText = m[groupIdx];
+          const offsetInMatch = m[0].indexOf(groupText);
+          const start = m.index + offsetInMatch;
+          const end = start + groupText.length;
+          if (start === end) continue;
+          matches.push({ start, end, color: rule.color, priority: rule.priority ?? 0 });
+        }
         if (!re.sticky && !re.global) break; // safety for non-global patterns
       }
     }

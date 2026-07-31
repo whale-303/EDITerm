@@ -413,26 +413,21 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         if (key.return || _input === '\r' || _input === '\t' || key.tab) {
           const text = completionSvc.accept();
           if (text) {
-            // Insert the accepted completion text
+            // Use refs for latest cursor/content — the closure captures stale
+            // state from when the popup first opened.
+            const curCursor = cursorRef.current;
+            const curLine = contentRef.current[curCursor.row] ?? '';
+            // Find the word prefix to replace — backward from cursor
+            let prefixStart = curCursor.col;
+            while (prefixStart > 0 && /[a-zA-Z0-9_]/.test(curLine[prefixStart - 1])) {
+              prefixStart--;
+            }
             setContent((prev) => {
               const lines = [...prev];
-              const line = lines[cursor.row];
-              // Find the prefix to replace — backward from cursor
-              let prefixStart = cursor.col;
-              while (prefixStart > 0 && /[a-zA-Z0-9_]/.test(line[prefixStart - 1])) {
-                prefixStart--;
-              }
-              lines[cursor.row] = line.slice(0, prefixStart) + text + line.slice(cursor.col);
+              lines[curCursor.row] = curLine.slice(0, prefixStart) + text + curLine.slice(curCursor.col);
               return lines;
             });
-            setCursor((c) => {
-              const line = contentRef.current[c.row];
-              let prefixStart = c.col;
-              while (prefixStart > 0 && /[a-zA-Z0-9_]/.test(line[prefixStart - 1])) {
-                prefixStart--;
-              }
-              return { ...c, col: prefixStart + text.length };
-            });
+            setCursor({ ...curCursor, col: prefixStart + text.length });
             // Mark dirty
             const path = api.editor.activePath;
             if (path) api.editor.markDirty(path, contentRef.current.join('\n'));
@@ -441,11 +436,12 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           return true;
         }
         // ── Let typing + editing pass through to the editor ──
-        // Characters, backspace, delete fall through so the editor
-        // updates content, and the auto-trigger re-filters the
-        // completion list on every keystroke.
+        // Characters, backspace, delete, and arrow keys fall through
+        // so the editor updates content/cursor, and the auto-trigger
+        // re-filters the completion list on every keystroke.
         if (_input && _input.length === 1 && _input.charCodeAt(0) >= 0x20) return false;
         if (key.backspace || key.delete) return false;
+        if (key.leftArrow || key.rightArrow) return false;
         return true; // eat everything else while completion is open
       });
     } else {
@@ -455,10 +451,20 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
 
   // Prompt handler
   const [promptValue, setPromptValue] = useState('');
+  const [promptCursor, setPromptCursor] = useState(0);
   const promptValueRef = useRef(promptValue);
   promptValueRef.current = promptValue;
+  const promptCursorRef = useRef(promptCursor);
+  promptCursorRef.current = promptCursor;
   useEffect(() => {
     if (promptSvc.isOpen) {
+      // Reset cursor when prompt opens (with default value if any)
+      const defVal = promptSvc.state?.defaultValue ?? '';
+      if (defVal) {
+        setPromptCursor(defVal.length);
+      } else {
+        setPromptCursor(0);
+      }
       inputStack.push('prompt', (_input: string, key: Key) => {
         if (key.escape) { promptSvc.close(); return true; }
         if (key.return || _input === '\r') {
@@ -466,11 +472,52 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           const finalValue = promptValueRef.current.trim() || promptSvc.state?.defaultValue || '';
           promptSvc.confirm(finalValue);
           setPromptValue('');
+          setPromptCursor(0);
           return true;
         }
-        if (key.backspace || key.delete) { setPromptValue((v) => v.slice(0, -1)); return true; }
+        // ── Cursor movement ──────────────────────
+        if (key.leftArrow) {
+          setPromptCursor((c) => Math.max(0, c - 1));
+          return true;
+        }
+        if (key.rightArrow) {
+          setPromptCursor((c) => Math.min(promptValueRef.current.length, c + 1));
+          return true;
+        }
+        if (_input === '\x1b[H' || _input === '\x1b[1~' || _input === '\x1bOH') {
+          setPromptCursor(0);
+          return true;
+        }
+        if (_input === '\x1b[F' || _input === '\x1b[4~' || _input === '\x1bOF') {
+          setPromptCursor(promptValueRef.current.length);
+          return true;
+        }
+        // ── Editing at cursor ────────────────────
+        if (key.backspace) {
+          setPromptValue((v) => {
+            const c = promptCursorRef.current;
+            if (c <= 0) return v;
+            const newVal = v.slice(0, c - 1) + v.slice(c);
+            setPromptCursor(Math.max(0, c - 1));
+            return newVal;
+          });
+          return true;
+        }
+        if (key.delete) {
+          setPromptValue((v) => {
+            const c = promptCursorRef.current;
+            if (c >= v.length) return v;
+            return v.slice(0, c) + v.slice(c + 1);
+          });
+          return true;
+        }
         if (_input && _input.length >= 1 && _input.charCodeAt(0) >= 0x20) {
-          setPromptValue((v) => v + _input);
+          setPromptValue((v) => {
+            const c = promptCursorRef.current;
+            const newVal = v.slice(0, c) + _input + v.slice(c);
+            setPromptCursor(c + _input.length);
+            return newVal;
+          });
         }
         return true;
       });
@@ -611,6 +658,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         showPalette={showPalette}
         onClosePalette={() => setShowPalette(false)}
         promptValue={promptValue}
+        promptCursor={promptCursor}
         onRegisterHandler={registerHandler}
         onUnregisterHandler={unregisterHandler}
       />
