@@ -4,19 +4,9 @@
  * Uses DI services for state instead of React refs/setters. Called from
  * SidebarPanel when E key is pressed or when right-clicking a file.
  */
-import { getService } from '../../core/di/container.js';
-import { TOKENS } from '../../core/di/tokens.js';
 import type { FileEntry } from '../../types/index.js';
-import type { IFileService } from '../../services/file/ifile-service.js';
-import type { IEditorService } from '../../core/editor/editor-service.js';
-import type { IWorkspaceService } from '../../services/workspace/iworkspace-service.js';
-import type { INotifyService } from '../../services/notify/inotify-service.js';
-import type { IPromptService } from '../../services/prompt/iprompt-service.js';
-import type { IMenuService, MenuItem } from '../../services/menu/imenu-service.js';
-import type { IClipboardService } from '../../services/clipboard/iclipboard-service.js';
+import type { MenuItem } from '../../services/menu/imenu-service.js';
 import type { IEditorAPI } from '../../api/ieditor-api.js';
-import { existsSync, statSync } from 'node:fs';
-import { resolve as pathResolve } from 'node:path';
 import { elog } from '../../util/error-log.js';
 
 export function showContextMenu(
@@ -50,14 +40,12 @@ export function showContextMenu(
         try {
           if (!(await fs.exists(entry.path))) {
             notify.add(`File not found: ${entry.name}`, [], 5000);
-            workspace.setSidebarPath('/');
             return;
           }
           await api.openFile(entry.path);
         } catch (e: any) {
           elog(`ctxmenu open ${entry.path}: ${e.message}`);
           notify.add(`Cannot open: ${e.message}`, [], 5000);
-          workspace.setSidebarPath('/');
         }
       },
       disabled: isActive,
@@ -73,7 +61,6 @@ export function showContextMenu(
         catch (e: any) {
           elog(`ctxmenu save ${entry.path}: ${e.message}`);
           notify.add(`Save failed: ${e.message}`, [], 5000);
-          workspace.setSidebarPath('/');
         }
       },
     });
@@ -94,11 +81,9 @@ export function showContextMenu(
               editor.setLoadedContent(entry.path, text);
             } else {
               notify.add(`File missing: ${entry.name} — discarding local changes only`, [], 5000);
-              workspace.setSidebarPath('/');
             }
           } catch {
             notify.add(`Cannot reload: ${entry.name}`, [], 5000);
-            workspace.setSidebarPath('/');
           }
         }
         notify.add(`Discarded: ${entry.name}`, [], 5000);
@@ -117,7 +102,7 @@ export function showContextMenu(
       key: 'w', label: 'Open Folder',
       action: async () => {
         try {
-          const folderPath = await prompt.open('Open folder path', { defaultValue: fs.basePath });
+          const folderPath = await prompt.open('Open folder path', { defaultValue: workspace.basePath });
           if (!folderPath) return;
           await api.openFolder(folderPath);
         } catch (e: any) {
@@ -152,17 +137,14 @@ export function showContextMenu(
         if (!name) return;
         const dir = isDir ? entry.path : parentDir;
         if (!(await fs.exists(dir))) {
-          notify.add(`Directory no longer exists — creating at root`, [], 5000);
-          workspace.setSidebarPath('/');
-          await fs.createFile('/', name);
-        } else {
-          await fs.createFile(dir, name);
+          notify.add(`Directory no longer exists`, [], 5000);
+          return;
         }
+        await fs.createFile(dir, name);
         await workspace.refreshTree();
         notify.add(`Created: ${name}`, [], 5000);
       } catch (e: any) {
         notify.add(`New file failed: ${e.message}`, [], 5000);
-        workspace.setSidebarPath('/');
       }
     },
   });
@@ -176,17 +158,14 @@ export function showContextMenu(
         if (!name) return;
         const dir = isDir ? entry.path : parentDir;
         if (!(await fs.exists(dir))) {
-          notify.add(`Directory no longer exists — creating at root`, [], 5000);
-          workspace.setSidebarPath('/');
-          await fs.createDirectory('/', name);
-        } else {
-          await fs.createDirectory(dir, name);
+          notify.add(`Directory no longer exists`, [], 5000);
+          return;
         }
+        await fs.createDirectory(dir, name);
         await workspace.refreshTree();
         notify.add(`Created: ${name}/`, [], 5000);
       } catch (e: any) {
         notify.add(`New directory failed: ${e.message}`, [], 5000);
-        workspace.setSidebarPath('/');
       }
     },
   });
@@ -201,7 +180,6 @@ export function showContextMenu(
       try {
         if (!(await fs.exists(entry.path))) {
           notify.add(`File not found: ${entry.name}`, [], 5000);
-          workspace.setSidebarPath('/');
           return;
         }
         const newName = await prompt.open('Rename', { defaultValue: entry.name });
@@ -212,7 +190,6 @@ export function showContextMenu(
         notify.add(`Renamed: ${entry.name} → ${newName}`, [], 5000);
       } catch (e: any) {
         notify.add(`Rename failed: ${e.message}`, [], 5000);
-        workspace.setSidebarPath('/');
       }
     },
   });
@@ -227,7 +204,6 @@ export function showContextMenu(
       try {
         if (!(await fs.exists(entry.path))) {
           notify.add(`Already deleted: ${entry.name}`, [], 5000);
-          workspace.setSidebarPath('/');
           await workspace.refreshTree();
           return;
         }
@@ -238,7 +214,6 @@ export function showContextMenu(
         notify.add(`Deleted: ${entry.name}`, [], 5000);
       } catch (e: any) {
         notify.add(`Delete failed: ${e.message}`, [], 5000);
-        workspace.setSidebarPath('/');
       }
     },
   });
@@ -274,7 +249,6 @@ export function showContextMenu(
         if (!(await fs.exists(clip.path))) {
           notify.add(`Source missing: ${srcName}`, [], 5000);
           clipboard.clear();
-          workspace.setSidebarPath('/');
           return;
         }
         await fs.copyEntry(clip.path, destDir);
@@ -287,7 +261,6 @@ export function showContextMenu(
         notify.add(clip.cut ? `Moved: ${srcName}` : `Copied: ${srcName}`, [], 5000);
       } catch (e: any) {
         notify.add(`Paste failed: ${e.message}`, [], 5000);
-        workspace.setSidebarPath('/');
       }
     },
   });

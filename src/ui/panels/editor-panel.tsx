@@ -16,6 +16,7 @@ import type { IFocusService } from '../../services/focus/ifocus-service.js';
 import type { IModeService } from '../../core/interaction/mode-service.js';
 import type { ILanguageService } from '../../services/language/ilanguage-service.js';
 import type { ICompletionService } from '../../services/completion/icompletion-service.js';
+import type { IGitService } from '../../services/git/igit-service.js';
 import type { EditorMode, VimSubMode } from '../../core/interaction/mode-manager.js';
 import type { SelectionRange } from '../app.js';
 import type { Key, InputHandlerFn } from '../hooks/input-stack.js';
@@ -213,6 +214,13 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   // Language id for syntax highlighting
   const languageId = editorSvc.activePath ? langSvc.detect(editorSvc.activePath).id : undefined;
 
+  // Git diff info — computed on every render; GitService caches (2s TTL),
+  // so cache hits are O(1) Map lookups. Async refresh → _notify() → re-render
+  // picks up fresh cache. useMemo would be stale since deps don't change on notify.
+  const gitSvc = useService<IGitService>(TOKENS.GitService);
+  const path = editorSvc.activePath;
+  const diffInfo = path ? gitSvc.getFileDiff(path, content.join('\n')) : null;
+
   // Completion state — subscribe for React re-renders
   const completionForRender = useService<ICompletionService>(TOKENS.CompletionService);
 
@@ -227,6 +235,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         width={editorWidth}
         height={editorHeight}
         languageId={languageId}
+        diffInfo={diffInfo}
         completionOpen={completionForRender.isOpen}
         completionItems={completionForRender.items}
         completionSelected={completionForRender.selectedIndex}

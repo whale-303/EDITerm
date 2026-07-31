@@ -27,6 +27,7 @@ import '../../services/workspace/workspace-service.js';
 import '../../api/editor-api.js';
 import '../../services/language/language-service.js';
 import '../../services/completion/completion-service.js';
+import '../../services/git/git-service.js';
 
 import type { IEditorAPI } from '../../api/ieditor-api.js';
 

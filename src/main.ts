@@ -9,7 +9,7 @@ import './core/editor/editor-service.js';
 import './core/layout/layout-manager.js';
 import './core/commands/command-registry.js';
 import './core/extensions/extension-host.js';
-import './services/file/file-service.js';
+import './services/file/vfs.js';
 import './services/theme/theme-service.js';
 import './services/tts/TTSService.js';
 

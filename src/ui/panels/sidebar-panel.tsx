@@ -4,17 +4,14 @@
  * Subscribes to WorkspaceService for tree data, EditorService for active/dirty state,
  * and handles sidebar-focused keyboard input (arrow keys, enter, shortcuts).
  */
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Sidebar } from '../components/sidebar.js';
-import { showContextMenu } from './context-menu-builder.js';
 import { useService } from '../hooks/use-service.js';
 import { useEditorAPI } from '../hooks/use-service.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { IWorkspaceService } from '../../services/workspace/iworkspace-service.js';
 import type { IEditorService } from '../../core/editor/editor-service.js';
-import type { IFocusService } from '../../services/focus/ifocus-service.js';
-import type { IModeService } from '../../core/interaction/mode-service.js';
-import type { IClipboardService } from '../../services/clipboard/iclipboard-service.js';
+import type { IGitService } from '../../services/git/igit-service.js';
 import type { FileEntry } from '../../types/index.js';
 
 export interface SidebarPanelProps {
@@ -27,6 +24,10 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
   const ws = useService<IWorkspaceService>(TOKENS.WorkspaceService);
   const editor = useService<IEditorService>(TOKENS.EditorService);
 
+  // Git workspace status — via useService to re-render on async cache updates
+  const git = useService<IGitService>(TOKENS.GitService);
+  const gitStatus = git.getWorkspaceStatus();
+
   // Load tree on mount
   useEffect(() => {
     api.bootstrap();
@@ -35,18 +36,14 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
   // Handle file selection (double-click / enter)
   const handleSelectFile = useCallback((entry: FileEntry) => {
     if (entry.isDirectory) {
+      // Load children if not yet loaded, then toggle expand
       ws.toggleExpand(entry.path);
-      // Children lazy-loaded by toggleExpand — no need for full refreshTree
       return;
     }
-    // If same file, skip
     if (entry.path === editor.activePath) return;
-    // Cache dirty content of current file
     if (editor.activePath && editor.isDirty(editor.activePath)) {
       // Note: the actual current content is managed by EditorPanel
-      // For now, trust the EditorService's dirty tracking
     }
-    // Check cached dirty version
     const cached = editor.getDirtyCache(entry.path);
     if (cached !== undefined) {
       editor.open(entry.path);
@@ -62,8 +59,6 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
         api.events.emit('file:opened', { path: entry.path });
       }).catch(() => {
         api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
-        // File no longer exists — reset cursor to root
-        ws.setSidebarPath('/');
       });
     }
   }, [api, ws, editor]);
@@ -71,11 +66,12 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
   return (
     <Sidebar
       entries={[
-        { name: '/ (workspace)', path: '/', isDirectory: true, children: ws.tree },
+        { name: '/', path: '/', isDirectory: true, children: ws.tree },
       ]}
       activePath={editor.activePath ?? undefined}
       selectedPath={ws.sidebarPath}
       dirtyFiles={editor.dirtyFiles}
+      gitStatus={gitStatus}
       height={Math.max(1, editorHeight - 4)}
       expandedPaths={new Set(ws.expandedPaths)}
       onSelectFile={handleSelectFile}

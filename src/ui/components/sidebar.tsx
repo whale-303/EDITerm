@@ -1,12 +1,15 @@
 import React, { useMemo, useRef } from 'react';
 import { Box, Text } from 'ink';
 import type { FileEntry } from '../../types/index.js';
+import type { GitFileStatus } from '../../services/git/igit-service.js';
 
 export interface SidebarProps {
   entries: FileEntry[];
   activePath?: string;
   selectedPath?: string;
   dirtyFiles?: Set<string> | ReadonlySet<string>;
+  /** Map of path → git file status (for tree colouring). */
+  gitStatus?: Map<string, GitFileStatus>;
   onSelectFile?: (entry: FileEntry) => void;
   width: number;
   /** Available rows for the tree body (header already subtracted). */
@@ -33,7 +36,7 @@ function flattenTree(entries: FileEntry[], expanded: Set<string>, depth: number)
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  entries, activePath, selectedPath, dirtyFiles, onSelectFile,
+  entries, activePath, selectedPath, dirtyFiles, gitStatus, onSelectFile,
   width, height, expandedPaths,
 }) => {
   const expanded = expandedPaths ?? new Set<string>();
@@ -106,6 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             activePath={activePath}
             selectedPath={selectedPath}
             dirtyFiles={dirtyFiles}
+            gitStatus={gitStatus}
             onSelectFile={onSelectFile}
             depth={depth}
             maxWidth={width - 2}
@@ -121,10 +125,11 @@ const FileTreeNode: React.FC<{
   activePath?: string;
   selectedPath?: string;
   dirtyFiles?: Set<string> | ReadonlySet<string>;
+  gitStatus?: Map<string, GitFileStatus>;
   onSelectFile?: (e: FileEntry) => void;
   depth: number;
   maxWidth: number;
-}> = ({ entry, activePath, selectedPath, dirtyFiles, onSelectFile, depth, maxWidth }) => {
+}> = ({ entry, activePath, selectedPath, dirtyFiles, gitStatus, onSelectFile, depth, maxWidth }) => {
   const isSelected = selectedPath === entry.path;
   const isActive = activePath === entry.path;
   const isDirty = dirtyFiles?.has(entry.path) ?? false;
@@ -136,6 +141,13 @@ const FileTreeNode: React.FC<{
     ? entry.name.slice(0, available - 1) + '…'
     : entry.name;
 
+  // Look up git status — if this path isn't directly in the map
+  // (e.g. a file inside an untracked directory), walk up parent dirs.
+  const git = lookupGitStatus(entry.path, gitStatus);
+
+  // Git status colour → file name colour (except active/selected)
+  const gitColor = gitFileNameColor(git?.status);
+
   return (
     <Box>
       <Text>
@@ -144,9 +156,57 @@ const FileTreeNode: React.FC<{
       <Text color={isDirty ? 'yellow' : undefined}>
         {dirtyMark}
       </Text>
-      <Text bold={isActive} inverse={isSelected}>
+      <Text bold={isActive} inverse={isSelected} color={gitColor}>
         {displayName}
       </Text>
     </Box>
   );
 };
+
+/** Look up git status for a path.
+ *  - Direct hit: return immediately (includes propagated directory colours).
+ *  - Walk up: only inherit from NON-propagated 'added' entries (untracked
+ *    directories listed directly by porcelain, e.g. "?? newdir/"). Sibling
+ *    files never leak colour through propagated ancestor directories. */
+function lookupGitStatus(
+  entryPath: string,
+  statusMap?: Map<string, GitFileStatus>,
+): GitFileStatus | undefined {
+  if (!statusMap || statusMap.size === 0) return undefined;
+
+  const direct = statusMap.get(entryPath);
+  if (direct) return direct;
+
+  let dir = parentDir(entryPath);
+  while (dir) {
+    const s = statusMap.get(dir);
+    // Only inherit 'added' from a direct porcelain hit — skip propagated dirs
+    if (s && !s.propagated && s.status === 'added') return s;
+    dir = parentDir(dir);
+  }
+  return undefined;
+}
+
+/** "/src/foo/bar" → "/src/foo", "/src" → undefined. */
+function parentDir(p: string): string | undefined {
+  const last = p.lastIndexOf('/');
+  if (last <= 0) return undefined;
+  return p.slice(0, last);
+}
+
+/** Map git file status to Ink colour. */
+function gitFileNameColor(status?: string): string | undefined {
+  switch (status) {
+    case 'added':
+    case 'untracked':
+      return '#a6e3a1'; // green
+    case 'modified':
+      return '#f9e2af'; // yellow
+    case 'deleted':
+      return '#f38ba8'; // red
+    case 'renamed':
+      return '#89b4fa'; // blue
+    default:
+      return undefined; // default foreground
+  }
+}

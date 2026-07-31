@@ -305,8 +305,6 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
             }).catch((e: any) => {
               elog(`sidebar: readFile ${entry.path}: ${e.message}`);
               api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
-              // File no longer exists — reset cursor to root
-              wsSvc.setSidebarPath('/');
             });
           }
           modeSvc.setMode('auto');

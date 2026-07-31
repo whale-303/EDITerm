@@ -19,9 +19,9 @@ import type { IMenuService } from '../services/menu/imenu-service.js';
 import type { IFocusService } from '../services/focus/ifocus-service.js';
 import type { IClipboardService } from '../services/clipboard/iclipboard-service.js';
 import type { ILayoutManager } from '../core/layout/layout-manager.js';
-import { SSHFileService } from '../services/file/ssh-service.js';
-import { existsSync, statSync } from 'node:fs';
+
 import { resolve as pathResolve } from 'node:path';
+import { realToVfs } from '../services/file/path-utils.js';
 import { elog } from '../util/error-log.js';
 
 // Re-export for convenience
@@ -174,17 +174,26 @@ export class EditorAPI implements IEditorAPI {
   }
 
   async openFolder(dirPath: string): Promise<void> {
-    const resolved = pathResolve(dirPath);
-    if (!existsSync(resolved)) {
-      this.notify.add(`Folder not found: ${resolved}`, [], 5000);
+    // Accept both VFS paths (/c/Users) and real paths (C:\Users)
+    let vpath: string;
+    if (dirPath.startsWith('/')) {
+      vpath = dirPath;
+    } else {
+      vpath = realToVfs(pathResolve(dirPath));
+    }
+
+    // Validate via VFS (works for local AND remote)
+    if (!(await this.fs.exists(vpath))) {
+      this.notify.add(`Folder not found: ${dirPath}`, [], 5000);
       return;
     }
-    if (!statSync(resolved).isDirectory()) {
-      this.notify.add(`Not a directory: ${resolved}`, [], 5000);
+    if (!(await this.fs.isDirectory(vpath))) {
+      this.notify.add(`Not a directory: ${dirPath}`, [], 5000);
       return;
     }
-    await this.workspace.switchLocal(resolved);
-    this.notify.add(`Workspace: ${resolved}`, [], 5000);
+
+    await this.workspace.switchLocal(vpath);
+    this.notify.add(`Workspace: ${vpath}`, [], 5000);
   }
 
   // ── Lifecycle ───────────────────────────────

@@ -32,4 +32,7 @@ export const TOKENS = {
   MenuService: Symbol('MenuService'),
   ClipboardService: Symbol('ClipboardService'),
   WorkspaceService: Symbol('WorkspaceService'),
+
+  // ── git ─────────────────────────────────────────
+  GitService: Symbol('GitService'),
 } as const;

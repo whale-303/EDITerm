@@ -1,10 +1,10 @@
 /**
  * SSHFileService — remote filesystem via node-ssh (SFTP + exec).
- * Implements IFileService so it's a drop-in swap for WorkspaceFileService.
+ * Implements IVFSProvider so it can be mounted into the VFS.
  */
 import { NodeSSH } from 'node-ssh';
 import type { FileEntry } from '../../types/index.js';
-import type { IFileService } from './ifile-service.js';
+import type { IVFSProvider, ExecResult } from './ivfs-provider.js';
 
 const SEP = '/';
 
@@ -16,7 +16,7 @@ export interface SSHConfig {
   password?: string;
 }
 
-export class SSHFileService implements IFileService {
+export class SSHFileService implements IVFSProvider {
   private _ssh: NodeSSH;
   private _host: string;
   private _port: number;
@@ -34,18 +34,14 @@ export class SSHFileService implements IFileService {
     this._password = config.password;
   }
 
-  get basePath(): string {
-    return `${this._host}:${this._remoteRoot}`;
+  /** Provider label for VFS mount listing. */
+  get label(): string {
+    return `ssh://${this._host}${this._remoteRoot}`;
   }
 
-  changeWorkspace(newPath: string): void {
-    if (newPath.includes(':')) {
-      const [host, ...rest] = newPath.split(':');
-      this._host = host;
-      this._remoteRoot = rest.join(':').replace(/\/+$/, '') || '/';
-    } else {
-      this._remoteRoot = newPath.replace(/\/+$/, '') || '/';
-    }
+  /** Display path (kept for workspace:changed event). */
+  get basePath(): string {
+    return `${this._host}:${this._remoteRoot}`;
   }
 
   // ── Connection ────────────────────────────────────
@@ -79,6 +75,36 @@ export class SSHFileService implements IFileService {
     }
   }
 
+  /** Convert a provider-relative path to a full remote path. */
+  toNativePath(relPath: string): string | null {
+    return this._remote(relPath);
+  }
+
+  /** Convert a full remote path back to a provider-relative path. */
+  fromNativePath(nativePath: string): string | null {
+    const root = this._remoteRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+    const normalized = nativePath.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (normalized === root) return '';
+    if (normalized.startsWith(root + '/')) {
+      return normalized.slice(root.length + 1);
+    }
+    return null; // not within this remote root
+  }
+
+  /** Execute a shell command on the remote server. Defaults cwd to remoteRoot. */
+  async execCommand(command: string, options?: { cwd?: string }): Promise<ExecResult> {
+    await this._ensureConnected();
+    // Use the specified cwd, or fall back to the configured remoteRoot
+    const cwd = options?.cwd ?? this._remoteRoot;
+    const cmd = `cd ${shEscape(cwd)} && ${command}`;
+    const result = await this._ssh.execCommand(cmd);
+    return {
+      stdout: String(result.stdout ?? ''),
+      stderr: String(result.stderr ?? ''),
+      code: result.code ?? null,
+    };
+  }
+
   // ── Path helpers ──────────────────────────────────
 
   resolve(...segments: string[]): string {
@@ -94,20 +120,24 @@ export class SSHFileService implements IFileService {
   }
 
   private _remote(p: string): string {
-    // Normalize: ensure exactly one / between root and path
+    // Normalize: join root and sub-path without double or trailing slashes
     const root = this._remoteRoot.replace(/\/+$/, '');
-    const sub = p.replace(/^\/+/, '');
-    return root + '/' + sub;
+    const sub = p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+    return sub ? `${root}/${sub}` : root;
   }
 
   parentDir(filePath: string): string {
-    const parts = filePath.replace(/\\/g, SEP).replace(/\/+$/, '').split(SEP).filter(Boolean);
+    const cleaned = filePath.replace(/\\/g, SEP).replace(/\/+$/, '');
+    if (cleaned === '' || cleaned === '/') return '';
+    const parts = cleaned.split(SEP).filter(Boolean);
     parts.pop();
-    return parts.length === 0 ? '/' : SEP + parts.join(SEP);
+    return parts.join(SEP);
   }
 
   baseName(filePath: string): string {
-    const parts = filePath.replace(/\\/g, SEP).replace(/\/+$/, '').split(SEP).filter(Boolean);
+    const cleaned = filePath.replace(/\\/g, SEP).replace(/\/+$/, '');
+    if (cleaned === '' || cleaned === '/') return '';
+    const parts = cleaned.split(SEP).filter(Boolean);
     return parts[parts.length - 1] ?? '';
   }
 
@@ -122,11 +152,12 @@ export class SSHFileService implements IFileService {
     const out = String(result.stdout ?? '');
 
     const entries: FileEntry[] = [];
+    const isRoot = dirPath === '/' || dirPath === '';
     for (const line of out.trim().split('\n')) {
       const name = line.replace(/\/$/, '');
       if (!name) continue;
       const isDir = line.endsWith('/');
-      const childPath = dirPath === '/' ? `/${name}` : `${dirPath}/${name}`;
+      const childPath = isRoot ? `/${name}` : `/${dirPath}/${name}`;
       entries.push({ name, path: childPath, isDirectory: isDir });
       // children NOT populated — lazy loaded on expand
     }
@@ -189,14 +220,14 @@ export class SSHFileService implements IFileService {
     await this._ensureConnected();
     const remoteDir = this._remote(parentDir);
     await this._ssh.execCommand(`mkdir -p ${shEscape(remoteDir)} && touch ${shEscape(remoteDir + '/' + name)}`);
-    return parentDir === '/' ? `/${name}` : `${parentDir}/${name}`;
+    return (parentDir === '/' || parentDir === '') ? name : `${parentDir}/${name}`;
   }
 
   async createDirectory(parentDir: string, name: string): Promise<string> {
     await this._ensureConnected();
     const remoteDir = this._remote(parentDir);
     await this._ssh.execCommand(`mkdir -p ${shEscape(remoteDir + '/' + name)}`);
-    return parentDir === '/' ? `/${name}` : `${parentDir}/${name}`;
+    return (parentDir === '/' || parentDir === '') ? name : `${parentDir}/${name}`;
   }
 
   async isDirectory(filePath: string): Promise<boolean> {

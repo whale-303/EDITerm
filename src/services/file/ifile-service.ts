@@ -1,15 +1,20 @@
 /**
- * IFileService — abstract file-system interface.
- * Both local (WorkspaceFileService) and remote (SSHFileService) implement this.
+ * IFileService — public filesystem interface consumed by the editor.
+ *
+ * The VFS class implements this interface.  It is kept intentionally
+ * close to IVFSProvider so that the VFS can delegate most methods
+ * without transformation.
+ *
+ * The ONLY differences from IVFSProvider are:
+ *   — basePath: display path for the VFS root (always '/' for VFS)
+ *   — changeWorkspace: REMOVED (workspace switching is now done by
+ *     mount/unmount on the VFS, coordinated by WorkspaceService)
  */
 import type { FileEntry } from '../../types/index.js';
 
 export interface IFileService {
   /** Root path for display / prompts. */
   readonly basePath: string;
-
-  /** Switch to a different workspace root. */
-  changeWorkspace(newPath: string): void;
 
   /** Resolve path segments into an absolute virtual path. */
   resolve(...segments: string[]): string;
