@@ -66,6 +66,15 @@ export class EditorAPI implements IEditorAPI {
     if (cached !== undefined) {
       await this.editor.open(path);
     } else {
+      // Binary detection — prompt before potentially garbled read
+      if (await this.fs.isProbablyBinary(path)) {
+        const answer = await this.prompt.open(
+          'File appears to be binary. Open anyway? [y/N]',
+        );
+        if (answer === null || (answer !== 'y' && answer !== 'yes')) {
+          return; // user cancelled
+        }
+      }
       const text = await this.fs.readFile(path);
       this.editor.setLoadedContent(path, text);
       await this.editor.open(path);

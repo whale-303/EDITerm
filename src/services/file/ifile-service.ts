@@ -54,4 +54,7 @@ export interface IFileService {
 
   /** Copy a file or directory to a destination directory. Returns the new path. */
   copyEntry(srcPath: string, destDir: string): Promise<string>;
+
+  /** Check whether a file is likely binary (null bytes or high non-printable ratio). */
+  isProbablyBinary(filePath: string): Promise<boolean>;
 }

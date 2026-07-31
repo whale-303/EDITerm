@@ -146,9 +146,8 @@ export function registerFileCommands(api: IEditorAPI): void {
       const path = ctx.target?.path ?? api.workspace.sidebarPath;
       const isDir = await api.fs.isDirectory(path);
       if (isDir) {
-        // Toggle expand
+        // Toggle expand — loads children on first expand (no need for full refreshTree)
         api.workspace.toggleExpand(path);
-        await api.workspace.refreshTree();
       } else {
         await api.openFile(path);
       }

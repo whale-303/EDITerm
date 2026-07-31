@@ -27,6 +27,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import type { FileEntry } from '../../types/index.js';
 import type { IVFSProvider, ExecResult } from './ivfs-provider.js';
 import { realToVfs } from './path-utils.js';
+import { isBinaryContent } from '../../util/binary-detect.js';
 
 export class LocalFileProvider implements IVFSProvider {
   readonly label = 'local';
@@ -144,6 +145,26 @@ export class LocalFileProvider implements IVFSProvider {
 
     const prefix = relPath.replace(/\/+$/, '');
     const result: FileEntry[] = [];
+
+    // ── ".." parent-directory entry ──────────────
+    // Full-filesystem:  /e/foo → .. = /e       (root / has no parent)
+    // Scoped workspace: /     → .. = scoped-parent  (navigate out of workspace)
+    if (prefix !== '') {
+      const parent = this.parentDir(prefix);
+      result.push({
+        name: '..',
+        path: parent ? `/${parent}` : '/',
+        isDirectory: true,
+      });
+    } else if (this._rootReal) {
+      // Scoped workspace root — provider-relative ".." resolves to parent dir
+      result.push({
+        name: '..',
+        path: '..',
+        isDirectory: true,
+      });
+    }
+
     for (const d of entries) {
       if (d.name.startsWith('.')) continue;
       result.push({
@@ -225,6 +246,22 @@ export class LocalFileProvider implements IVFSProvider {
       await fsp.copyFile(srcAbs, destAbsPath);
     }
     return `${destDir}/${srcName}`;
+  }
+
+  async isProbablyBinary(relPath: string): Promise<boolean> {
+    try {
+      const abs = this._toOSPath(relPath);
+      const fh = await fsp.open(abs, 'r');
+      try {
+        const buf = Buffer.alloc(8192);
+        const { bytesRead } = await fh.read(buf, 0, 8192, 0);
+        return isBinaryContent(buf.subarray(0, bytesRead));
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return false; // can't read → let readFile surface the real error
+    }
   }
 
   // ── Internal ─────────────────────────────────────

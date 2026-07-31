@@ -50,16 +50,26 @@ export const SidebarPanel: React.FC<SidebarPanelProps> = ({ width, editorHeight 
       api.mode.setMode('auto');
       api.focus.set('editor');
     } else {
-      api.fs.readFile(entry.path).then((text) => {
-        editor.setLoadedContent(entry.path, text);
-        editor.markClean(entry.path);
-        editor.open(entry.path);
-        api.mode.setMode('auto');
-        api.focus.set('editor');
-        api.events.emit('file:opened', { path: entry.path });
-      }).catch(() => {
-        api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
-      });
+      (async () => {
+        try {
+          // Binary detection — prompt before potentially garbled read
+          if (await api.fs.isProbablyBinary(entry.path)) {
+            const answer = await api.prompt.open(
+              'File appears to be binary. Open anyway? [y/N]',
+            );
+            if (answer === null || (answer !== 'y' && answer !== 'yes')) return;
+          }
+          const text = await api.fs.readFile(entry.path);
+          editor.setLoadedContent(entry.path, text);
+          editor.markClean(entry.path);
+          editor.open(entry.path);
+          api.mode.setMode('auto');
+          api.focus.set('editor');
+          api.events.emit('file:opened', { path: entry.path });
+        } catch {
+          api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
+        }
+      })();
     }
   }, [api, ws, editor]);
 

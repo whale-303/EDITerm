@@ -278,8 +278,8 @@ function handleAutoMode(
 ): void {
   if (key.upArrow)    { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return; }
   if (key.downArrow)  { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return; }
-  if (key.leftArrow)  { setCursor((c) => ({ ...c, col: Math.max(0, c.col - 1) })); return; }
-  if (key.rightArrow) { setCursor((c) => ({ ...c, col: Math.min(content[c.row]?.length ?? 0, c.col + 1) })); return; }
+  if (key.leftArrow)  { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.max(0, clamped - 1) }; }); return; }
+  if (key.rightArrow) { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.min(lineLen, clamped + 1) }; }); return; }
   if (input === '\x1b[H' || input === '\x1b[1~' || input === '\x1bOH') { setCursor((c) => ({ ...c, col: 0 })); return; }
   if (input === '\x1b[F' || input === '\x1b[4~' || input === '\x1bOF') { setCursor((c) => ({ ...c, col: content[c.row]?.length ?? 0 })); return; }
   if (input === '\x1b[5~') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 10) })); return; }
@@ -300,8 +300,8 @@ function handleVimNormal(
 ): void {
   if (key.upArrow    || input === 'k') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return; }
   if (key.downArrow  || input === 'j') { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return; }
-  if (key.leftArrow  || input === 'h') { setCursor((c) => ({ ...c, col: Math.max(0, c.col - 1) })); return; }
-  if (key.rightArrow || input === 'l') { setCursor((c) => ({ ...c, col: Math.min(content[c.row]?.length ?? 0, c.col + 1) })); return; }
+  if (key.leftArrow  || input === 'h') { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.max(0, clamped - 1) }; }); return; }
+  if (key.rightArrow || input === 'l') { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.min(lineLen, clamped + 1) }; }); return; }
   if (input === '\x15') { setScrollOffset((s) => Math.max(0, s - Math.floor(editorHeight / 2))); return; }
   if (input === '\x04') { setScrollOffset((s) => Math.min(Math.max(0, content.length - editorHeight), s + Math.floor(editorHeight / 2))); return; }
   if (input === '\x02') { setScrollOffset((s) => Math.max(0, s - editorHeight)); return; }
@@ -323,8 +323,8 @@ function moveCursorVisual(
 ): boolean {
   if (key.upArrow    || input === 'k') { setCursor((c) => ({ ...c, row: Math.max(0, c.row - 1) })); return true; }
   if (key.downArrow  || input === 'j') { setCursor((c) => ({ ...c, row: Math.min(content.length - 1, c.row + 1) })); return true; }
-  if (key.leftArrow  || input === 'h') { setCursor((c) => ({ ...c, col: Math.max(0, c.col - 1) })); return true; }
-  if (key.rightArrow || input === 'l') { setCursor((c) => ({ ...c, col: Math.min(content[c.row]?.length ?? 0, c.col + 1) })); return true; }
+  if (key.leftArrow  || input === 'h') { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.max(0, clamped - 1) }; }); return true; }
+  if (key.rightArrow || input === 'l') { setCursor((c) => { const lineLen = content[c.row]?.length ?? 0; const clamped = Math.min(c.col, lineLen); return { ...c, col: Math.min(lineLen, clamped + 1) }; }); return true; }
   if (input === '\x15') { setScrollOffset((s) => Math.max(0, s - Math.floor(editorHeight / 2))); return true; }
   if (input === '\x04') { setScrollOffset((s) => Math.min(Math.max(0, content.length - editorHeight), s + Math.floor(editorHeight / 2))); return true; }
   if (input === '\x02') { setScrollOffset((s) => Math.max(0, s - editorHeight)); return true; }

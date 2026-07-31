@@ -92,17 +92,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasBelow = scrollOffset + height < flat.length;
 
   return (
-    <Box flexDirection="column" width={width} borderStyle="single" paddingLeft={0}>
-      <Box>
-        <Text bold> WORKSPACE </Text>
-        {hasAbove && <Text dimColor> ↑</Text>}
-      </Box>
-      <Box>
-        <Text dimColor>
-          {hasAbove ? '▲' : '─'}{'─'.repeat(Math.max(0, width - 4))}{hasBelow ? '▼' : '─'}
-        </Text>
-      </Box>
+    <Box flexDirection="column" width={width} borderLeft={true} borderRight={true} borderTop={false} borderBottom={false} borderStyle="single" borderColor="gray" paddingLeft={0}>
       <Box flexDirection="column" flexGrow={1}>
+        {hasAbove && (
+          <Box>
+            <Text dimColor> ↑ more</Text>
+          </Box>
+        )}
         {visible.map(({ entry, depth }) => (
           <FileTreeNode
             key={entry.path}
@@ -116,6 +112,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             maxWidth={width - 2}
           />
         ))}
+        {hasBelow && (
+          <Box>
+            <Text dimColor> ↓ more</Text>
+          </Box>
+        )}
       </Box>
     </Box>
   );

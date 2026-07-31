@@ -147,6 +147,16 @@ export class WorkspaceService implements IWorkspaceService {
       await this._expandPathToWorkspace();
     }
 
+    // Re-expand previously expanded directories (refreshTree replaces _tree,
+    // so all loaded children are lost — reload them from the expanded set)
+    if (this._expanded.size > 0) {
+      const toExpand = [...this._expanded];
+      for (const p of toExpand) {
+        if (p === '/') continue; // root children already loaded
+        await this._loadChildren(p);
+      }
+    }
+
     this._notify();
 
     try {

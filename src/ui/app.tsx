@@ -204,7 +204,7 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   }, [cursor.row, editorHeight]);
 
   // ── Mouse → actions ───────────────────────────
-  const sidebarWidth = Math.min(26, Math.floor(cols * 0.25));
+  const sidebarWidth = Math.min(32, Math.floor(cols * 0.3));
 
   useEffect(() => {
     if (!mouse) return;
@@ -298,14 +298,24 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
             setContent(cached.split('\n'));
             api.editor.open(entry.path);
           } else {
-            api.fs.readFile(entry.path).then((text) => {
-              setContent(text.split('\n'));
-              api.editor.open(entry.path);
-              api.editor.setLoadedContent(entry.path, text);
-            }).catch((e: any) => {
-              elog(`sidebar: readFile ${entry.path}: ${e.message}`);
-              api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
-            });
+            (async () => {
+              try {
+                // Binary detection — prompt before potentially garbled read
+                if (await api.fs.isProbablyBinary(entry.path)) {
+                  const answer = await api.prompt.open(
+                    'File appears to be binary. Open anyway? [y/N]',
+                  );
+                  if (answer === null || (answer !== 'y' && answer !== 'yes')) return;
+                }
+                const text = await api.fs.readFile(entry.path);
+                setContent(text.split('\n'));
+                api.editor.open(entry.path);
+                api.editor.setLoadedContent(entry.path, text);
+              } catch (e: any) {
+                elog(`sidebar: readFile ${entry.path}: ${e.message}`);
+                api.notify.add(`Cannot read: ${entry.name}`, [], 5000);
+              }
+            })();
           }
           modeSvc.setMode('auto');
           focusSvc.set('editor');

@@ -51,7 +51,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           line,
           row: actualRow,
           tokens,
-          cursorCol: isCursorRow ? cursorCol : -1,
+          cursorCol: isCursorRow ? Math.min(cursorCol, line.length) : -1,
           sel: selInfo,
           diff: diffType ?? 'unchanged',
           hasDeletionAbove,
@@ -134,6 +134,27 @@ const ANSI_INVERSE_OFF = '\x1b[27m';
 const DIFF_ADDED_BG    = '\x1b[48;2;25;50;25m';
 const DIFF_MODIFIED_BG = '\x1b[48;2;30;35;60m';
 
+// ── Control character rendering ─────────────────────
+// Red background for non-printable characters
+
+const CONTROL_BG = '\x1b[41m';  // ANSI red background
+const CONTROL_FG = '\x1b[97m';  // bright white foreground
+
+/** Characters that should be shown as control pictures. */
+function isControl(ch: string): boolean {
+  if (ch.length !== 1) return false;
+  const code = ch.charCodeAt(0);
+  // C0 controls except tab (0x09), plus DEL (0x7F)
+  return (code < 0x20 && code !== 0x09) || code === 0x7F;
+}
+
+/** Caret-notation picture: NUL→@  SOH→A  …  US→_  DEL→? */
+function controlPicture(code: number): string {
+  if (code < 0x20) return String.fromCharCode(code + 0x40);
+  if (code === 0x7F) return '?';
+  return String.fromCharCode(code);
+}
+
 // ── Segment builder ───────────────────────────────────
 
 interface Segment {
@@ -142,14 +163,20 @@ interface Segment {
   fg: string | null;
   bg: string | null;
   inverse: boolean;
+  /** If set, this segment is a single control char to be rendered as this picture. */
+  controlChar?: string;
 }
 
-/** Collect all breakpoints from tokens, selection, cursor. */
-function collectBreakpoints(lineLen: number, tokens: Token[], sel: LineSel | null, cursorCol: number): number[] {
+/** Collect all breakpoints from tokens, selection, cursor, and control characters. */
+function collectBreakpoints(line: string, lineLen: number, tokens: Token[], sel: LineSel | null, cursorCol: number): number[] {
   const breaks = new Set<number>([0, lineLen]);
   for (const t of tokens) { breaks.add(clamp(t.start, lineLen)); breaks.add(clamp(t.end, lineLen)); }
   if (sel) { breaks.add(clamp(sel.startCol, lineLen)); breaks.add(clamp(sel.endCol, lineLen)); }
   if (cursorCol >= 0 && cursorCol <= lineLen) { breaks.add(cursorCol); breaks.add(cursorCol + 1); }
+  // Isolate each control character so it gets its own segment
+  for (let i = 0; i < lineLen; i++) {
+    if (isControl(line[i])) { breaks.add(i); breaks.add(i + 1); }
+  }
   return [...breaks].sort((a, b) => a - b);
 }
 
@@ -168,7 +195,7 @@ function buildSegments(line: string, ctx: LineContext): Segment[] {
     return [];
   }
 
-  const breaks = collectBreakpoints(lineLen, ctx.tokens, ctx.sel, ctx.cursorCol);
+  const breaks = collectBreakpoints(line, lineLen, ctx.tokens, ctx.sel, ctx.cursorCol);
   const segments: Segment[] = [];
 
   for (let i = 0; i < breaks.length - 1; i++) {
@@ -183,6 +210,14 @@ function buildSegments(line: string, ctx: LineContext): Segment[] {
       bg: diffBg(ctx.diff),
       inverse: false,
     };
+
+    // Single control character → render as picture with red background
+    if (end === start + 1 && isControl(line[start])) {
+      seg.controlChar = controlPicture(line.charCodeAt(start));
+      // Don't apply syntax fg or diff bg to control chars
+      segments.push(seg);
+      continue;
+    }
 
     // Syntax fg: pick the highest-priority token covering this segment
     for (const t of ctx.tokens) {
@@ -225,7 +260,9 @@ function mergeSegments(segs: Segment[]): Segment[] {
   let cur = segs[0];
   for (let i = 1; i < segs.length; i++) {
     const next = segs[i];
-    if (cur.fg === next.fg && cur.bg === next.bg && cur.inverse === next.inverse) {
+    // Never merge control-char segments with neighbours
+    if (!cur.controlChar && !next.controlChar &&
+        cur.fg === next.fg && cur.bg === next.bg && cur.inverse === next.inverse) {
       cur = { ...cur, end: next.end };
     } else {
       merged.push(cur);
@@ -241,6 +278,16 @@ function emitSegments(line: string, segments: Segment[]): string {
   if (segments.length === 0) return '';
   const parts: string[] = [];
   for (const seg of segments) {
+    // Control character → picture glyph with red background
+    if (seg.controlChar) {
+      parts.push(CONTROL_BG, CONTROL_FG);
+      if (seg.inverse) parts.push(ANSI_INVERSE);
+      parts.push(seg.controlChar);
+      if (seg.inverse) parts.push(ANSI_INVERSE_OFF);
+      parts.push(ANSI_RESET_FG, ANSI_RESET_BG);
+      continue;
+    }
+
     const text = line.slice(seg.start, seg.end);
     const codes: string[] = [];
     if (seg.inverse) codes.push(ANSI_INVERSE);
@@ -272,7 +319,18 @@ function renderContent(ctx: LineContext): string {
   if (ctx.line.length === 0) return '';
 
   const segments = buildSegments(ctx.line, ctx);
-  return emitSegments(ctx.line, segments);
+  const content = emitSegments(ctx.line, segments);
+
+  // Cursor at end of non-empty line — append inverse space block
+  if (ctx.cursorCol === ctx.line.length) {
+    let cursor = ANSI_INVERSE + ' ' + ANSI_INVERSE_OFF;
+    if (ctx.diff !== 'unchanged') {
+      cursor = (diffBg(ctx.diff) ?? '') + cursor + ANSI_RESET_BG;
+    }
+    return content + cursor;
+  }
+
+  return content;
 }
 
 // ── ANSI helpers ────────────────────────────────────

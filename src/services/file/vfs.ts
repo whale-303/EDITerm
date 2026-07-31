@@ -174,6 +174,11 @@ export class VFS implements IFileService {
     return joinVfs(mountPrefix, newRelPath);
   }
 
+  async isProbablyBinary(filePath: string): Promise<boolean> {
+    const { provider, relPath } = this._resolve(filePath);
+    return provider.isProbablyBinary?.(relPath) ?? false;
+  }
+
   // ── Native path bridge ─────────────────────────────
 
   /**
