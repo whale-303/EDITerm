@@ -9,6 +9,7 @@ import { TOKENS } from '../di/tokens.js';
 import type { IEventBus } from '../events/event-bus.js';
 import { ModeManager } from './mode-manager.js';
 import type { EditorMode, VimSubMode, ModeChangeEvent, ModeChangeListener } from './mode-manager.js';
+import type { ContributionHost } from '../contributions/contribution-host.js';
 
 // Re-export types for convenience
 export type { EditorMode, VimSubMode, ModeChangeEvent, ModeChangeListener };
@@ -24,6 +25,18 @@ export interface IModeService {
 
 export class ModeService implements IModeService {
   private inner = new ModeManager();
+
+  constructor() {
+    try {
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'mode') return this.inner.mode;
+          return undefined;
+        },
+      });
+    } catch { /* ContributionHost not yet available */ }
+  }
 
   get mode(): EditorMode {
     return this.inner.mode;

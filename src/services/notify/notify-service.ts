@@ -2,9 +2,10 @@
  * NotifyService — notification queue with auto-dismiss timers.
  * Registered as DI singleton via TOKENS.NotifyService.
  */
-import { register } from '../../core/di/container.js';
+import { register, getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { INotifyService, NotifyItem, NotifyAction } from './inotify-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
 
 export type { NotifyItem, NotifyAction };
 
@@ -13,6 +14,29 @@ export class NotifyService implements INotifyService {
   private _nextId = 0;
   private _timers = new Map<number, ReturnType<typeof setTimeout>>();
   private _listeners = new Set<() => void>();
+
+  constructor() {
+    try {
+      const self = this;
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'notify.hasActionable') return self.hasActionable ? 'true' : 'false';
+          return undefined;
+        },
+      });
+      host.popups.register({
+        id: 'notify',
+        get isActive() { return self.hasActionable; },
+        priority: 40,
+      });
+      host.focusTargets.register({
+        id: 'notify',
+        isAvailable: () => self.hasActionable,
+        order: 11,
+      });
+    } catch { /* ContributionHost not yet available */ }
+  }
 
   get items(): ReadonlyArray<NotifyItem> {
     return this._items;

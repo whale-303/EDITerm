@@ -7,6 +7,7 @@ import { TOKENS } from '../../core/di/tokens.js';
 import type { ICompletionService, CompletionItem } from './icompletion-service.js';
 import type { ILanguageService } from '../language/ilanguage-service.js';
 import type { IEditorService } from '../../core/editor/editor-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
 
 const MIN_PREFIX = 2;
 
@@ -19,6 +20,24 @@ export class CompletionService implements ICompletionService {
   private _listeners = new Set<() => void>();
   /** Words indexed from current file. */
   private _wordIndex = new Set<string>();
+
+  constructor() {
+    try {
+      const self = this;
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'completion.isOpen') return self._open ? 'true' : 'false';
+          return undefined;
+        },
+      });
+      host.popups.register({
+        id: 'completion',
+        get isActive() { return self._open; },
+        priority: 30,
+      });
+    } catch { /* ContributionHost not yet available */ }
+  }
 
   get isOpen(): boolean { return this._open; }
   get items(): ReadonlyArray<CompletionItem> { return this._items; }

@@ -35,6 +35,7 @@ import type { IWorkspaceService } from './iworkspace-service.js';
 import type { IEventBus } from '../../core/events/event-bus.js';
 import { elog } from '../../util/error-log.js';
 import type { IGitService } from '../git/igit-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
 
 const DEFAULT_WORKSPACE = './test_workspace';
 
@@ -61,6 +62,17 @@ export class WorkspaceService implements IWorkspaceService {
 
     // Start sidebar at the workspace directory
     this._sidebarPath = this._workspaceVPath;
+
+    // Register context key provider
+    try {
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'sidebarPath') return this._sidebarPath;
+          return undefined;
+        },
+      });
+    } catch { /* ContributionHost not yet available */ }
   }
 
   // ── Accessors ─────────────────────────────────────

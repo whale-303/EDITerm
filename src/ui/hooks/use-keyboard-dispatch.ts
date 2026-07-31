@@ -14,70 +14,20 @@ import { getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { ICommandRegistry } from '../../core/commands/command-registry.js';
 import type { IFocusService } from '../../services/focus/ifocus-service.js';
-import type { IModeService } from '../../core/interaction/mode-service.js';
 import type { IWorkspaceService } from '../../services/workspace/iworkspace-service.js';
-import type { IClipboardService } from '../../services/clipboard/iclipboard-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
+import type { WhenContext } from '../../core/contributions/types.js';
 import type { Command } from '../../types/index.js';
 
 // ── When condition evaluator ──────────────────────
 
-interface WhenContext {
-  focus: string;
-  mode: string;
-  sidebarPath: string;
-  clipboardHasContent: boolean;
-}
-
-function evalWhen(when: string | undefined, ctx: WhenContext): boolean {
-  if (!when || when === 'global') return true;
-
-  // Split by &&, trim each part, evaluate all
-  const parts = when.split('&&').map((s) => s.trim());
-  return parts.every((part) => evalSingleExpr(part, ctx));
-}
-
-function evalSingleExpr(expr: string, ctx: WhenContext): boolean {
-  // Parse: key==value or key!=value
-  const eqMatch = expr.match(/^(\w+)==(.+)$/);
-  if (eqMatch) {
-    const [, key, val] = eqMatch;
-    return resolve(key, ctx) === val;
-  }
-  const neqMatch = expr.match(/^(\w+)!=(.+)$/);
-  if (neqMatch) {
-    const [, key, val] = neqMatch;
-    return resolve(key, ctx) !== val;
-  }
-  // Single word — treat as boolean: true if non-empty/non-false
-  return resolve(expr, ctx) === 'true';
-}
-
-function resolve(key: string, ctx: WhenContext): string {
-  switch (key) {
-    case 'focus':                return ctx.focus;
-    case 'mode':                 return ctx.mode;
-    case 'sidebarPath':          return ctx.sidebarPath;
-    case 'clipboard.hasContent': return ctx.clipboardHasContent ? 'true' : 'false';
-    default:                     return '';
-  }
-}
-
-// ── Build context from DI services ────────────────
-
 function buildWhenContext(): WhenContext {
   try {
-    const focus = getService<IFocusService>(TOKENS.FocusService);
-    const mode = getService<IModeService>(TOKENS.ModeService);
-    const ws = getService<IWorkspaceService>(TOKENS.WorkspaceService);
-    const clip = getService<IClipboardService>(TOKENS.ClipboardService);
-    return {
-      focus: focus.current,
-      mode: mode.mode,
-      sidebarPath: ws.sidebarPath,
-      clipboardHasContent: clip.hasContent,
-    };
+    const host = getService<ContributionHost>(TOKENS.ContributionHost);
+    return host.buildContext();
   } catch {
-    return { focus: 'sidebar', mode: 'normal', sidebarPath: '/', clipboardHasContent: false };
+    // Fallback: empty context for early bootstrap before host is ready
+    return { resolve: () => '' };
   }
 }
 
@@ -103,6 +53,7 @@ export function useKeyboardDispatch(): void {
     } catch { /* */ }
 
     const ctx = buildWhenContext();
+    const host = getService<ContributionHost>(TOKENS.ContributionHost);
 
     // Try direct keybinding match first
     let cmd = registry.findByKeybinding(input);
@@ -114,14 +65,14 @@ export function useKeyboardDispatch(): void {
 
     if (!cmd) return;
 
-    // Evaluate when condition
-    if (!evalWhen(cmd.when, ctx)) return;
+    // Evaluate when condition via ContextKeyRegistry
+    if (!host.contextKeys.evalWhen(cmd.when, ctx)) return;
 
     // Execute
     try {
       cmd.run({
         source: 'keyboard',
-        target: { path: ctx.sidebarPath },
+        target: { path: ctx.resolve('sidebarPath') },
       });
     } catch (err) {
       // Silently ignore command errors (they should self-report via notify)

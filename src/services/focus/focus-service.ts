@@ -9,16 +9,38 @@
 import { register, getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { IFocusService, FocusTarget } from './ifocus-service.js';
-import type { IModeService } from '../../core/interaction/mode-service.js';
-import type { INotifyService } from '../notify/inotify-service.js';
-import type { IMenuService } from '../menu/imenu-service.js';
-import type { IPromptService } from '../prompt/iprompt-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
 
 export type { FocusTarget };
 
 export class FocusService implements IFocusService {
   private _current: FocusTarget = 'sidebar';
   private _listeners = new Set<() => void>();
+
+  constructor() {
+    // Register context key + focus targets with ContributionHost
+    const self = this;
+    try {
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'focus') return self._current;
+          return undefined;
+        },
+      });
+      // Base focus targets — always available
+      host.focusTargets.register({
+        id: 'sidebar',
+        isAvailable: () => true, // always cyclable
+        order: 1,
+      });
+      host.focusTargets.register({
+        id: 'editor',
+        isAvailable: () => true,
+        order: 2,
+      });
+    } catch { /* ContributionHost not yet available */ }
+  }
 
   get current(): FocusTarget {
     return this._current;
@@ -48,41 +70,14 @@ export class FocusService implements IFocusService {
     return () => { this._listeners.delete(fn); };
   }
 
-  /** Compute which targets F3 can cycle through based on current app state. */
+  /** Compute which targets F3 can cycle through using the FocusTargetRegistry. */
   private _computeAvailable(): FocusTarget[] {
-    const targets: FocusTarget[] = [];
-
-    // Popups first if they're open
     try {
-      const notify = getService<INotifyService>(TOKENS.NotifyService);
-      if (notify.hasActionable) targets.push('notify');
-    } catch { /* not yet registered */ }
-
-    try {
-      const menu = getService<IMenuService>(TOKENS.MenuService);
-      if (menu.isOpen) targets.push('menu');
-    } catch { /* not yet registered */ }
-
-    try {
-      const prompt = getService<IPromptService>(TOKENS.PromptService);
-      if (prompt.isOpen) targets.push('prompt');
-    } catch { /* not yet registered */ }
-
-    // Mode-dependent target
-    try {
-      const mode = getService<IModeService>(TOKENS.ModeService);
-      if (mode.mode === 'normal') {
-        targets.push('sidebar');
-      } else {
-        targets.push('editor');
-      }
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      return host.focusTargets.getAvailable().map((t) => t.id as FocusTarget);
     } catch {
-      // Fallback: always include sidebar and editor
-      targets.push('sidebar');
-      targets.push('editor');
+      return ['sidebar', 'editor'];
     }
-
-    return targets;
   }
 
   private _notify(): void {

@@ -1,14 +1,16 @@
-import React, { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useInput } from 'ink';
 import { InputContext } from './hooks/input-context.js';
-import { useInputStack } from './hooks/input-stack.js';
 import type { Key } from './hooks/input-stack.js';
 import { AppShell } from './panels/app-shell.js';
 import { showContextMenu } from './panels/context-menu-builder.js';
 import { useEditorAPI } from './hooks/use-service.js';
 import { useService } from './hooks/use-service.js';
+import { getService } from '../core/di/container.js';
 import { TOKENS } from '../core/di/tokens.js';
 import { registerAllCommands } from '../commands/index.js';
+import { usePopupFocusManager } from './hooks/use-popup-focus-manager.js';
+import type { ContributionHost } from '../core/contributions/contribution-host.js';
 import type { IModeService } from '../core/interaction/mode-service.js';
 import type { IFocusService } from '../services/focus/ifocus-service.js';
 import type { IMenuService } from '../services/menu/imenu-service.js';
@@ -19,10 +21,11 @@ import type { ICompletionService } from '../services/completion/icompletion-serv
 import type { FileEntry } from '../types/index.js';
 import type { MouseEvent } from '../core/interaction/mouse-protocol.js';
 import { elog } from '../util/error-log.js';
-import { getService } from '../core/di/container.js';
 import type { IExtensionHost } from '../core/extensions/extension-host.js';
 import { resolve } from 'node:path';
 import { readdirSync, existsSync } from 'node:fs';
+// Ensure ContributionHost is registered before any service tries to access it
+import '../core/contributions/contribution-host.js';
 
 // ── Constants ─────────────────────────────────────────
 
@@ -243,7 +246,10 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   }, [mouse, content.length, scrollOffset, editorHeight, consumeMouse, menuSvc, focusSvc, wsSvc.tree, wsSvc.expandedPaths, cols, rows, sidebarWidth, api]);
 
   // ── Keyboard dispatch ──────────────────────────
-  const inputStack = useInputStack();
+  const host = getService<ContributionHost>(TOKENS.ContributionHost);
+
+  // ── Popup focus management (replaces 6 useLayoutEffect blocks) ──
+  usePopupFocusManager(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
 
   // Sidebar navigation handler
   const sidebarPathRef = useRef(wsSvc.sidebarPath);
@@ -254,7 +260,11 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   treeRef.current = wsSvc.tree;
 
   useEffect(() => {
-    inputStack.push('sidebar', (_input: string, key: Key) => {
+    host.inputHandlers.register({
+      id: 'sidebar',
+      priority: 10,
+      when: 'focus==sidebar',
+      handle(_input: string, key: Key) {
       if (focusSvc.current !== 'sidebar') return false;
       const flat = flattenTreeWithRoot(treeRef.current, new Set(treeExpandedRef.current));
       let idx = flat.findIndex((e) => e.path === sidebarPathRef.current);
@@ -355,17 +365,20 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         return true;
       }
       return false;
+      },
     });
   }, []); // stable — all dynamic values via refs
 
-  // Menu handler
+  // Menu handler — registered once, when-condition gates activation
   const menuCloseRef = useRef(() => menuSvc.close());
   menuCloseRef.current = () => menuSvc.close();
 
   useEffect(() => {
-    if (menuSvc.isOpen) {
-      inputStack.push('menu', (_input: string, key: Key) => {
-        if (focusSvc.current !== 'menu') return false;
+    host.inputHandlers.register({
+      id: 'menu',
+      priority: 50,
+      when: 'focus==menu',
+      handle(_input: string, key: Key) {
         if (key.escape) { menuCloseRef.current(); return true; }
         if (key.upArrow) { menuSvc.moveHighlight(-1); return true; }
         if (key.downArrow) { menuSvc.moveHighlight(1); return true; }
@@ -381,18 +394,17 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           }
         }
         return true;
-      });
-    } else {
-      inputStack.pop('menu');
-    }
-  }, [menuSvc.isOpen]);
+      },
+    });
+  }, []);
 
-  // Notify handler
+  // Notify handler — registered once, when-condition gates activation
   useEffect(() => {
-    const hasNotify = notifySvc.hasActionable;
-    if (hasNotify) {
-      inputStack.push('notify', (_input: string, key: Key) => {
-        if (focusSvc.current !== 'notify') return false;
+    host.inputHandlers.register({
+      id: 'notify',
+      priority: 40,
+      when: 'focus==notify',
+      handle(_input: string, key: Key) {
         const items = notifySvc.items;
         const latest = items[items.length - 1];
         if (!latest || latest.actions.length === 0) return false;
@@ -403,19 +415,19 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           }
         }
         return true;
-      });
-    } else {
-      inputStack.pop('notify');
-    }
-  }, [notifySvc.hasActionable]);
+      },
+    });
+  }, []);
 
-  // Completion handler
+  // Completion handler — registered once, when-condition gates activation
   useEffect(() => {
-    if (completionSvc.isOpen) {
-      inputStack.push('completion', (_input: string, key: Key) => {
+    host.inputHandlers.register({
+      id: 'completion',
+      priority: 40,
+      when: 'completion.isOpen',
+      handle(_input: string, key: Key) {
         if (key.escape) {
           completionSvc.close();
-          focusSvc.set(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
           return true;
         }
         if (key.upArrow) { completionSvc.moveSelection(-1); return true; }
@@ -453,13 +465,11 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         if (key.backspace || key.delete) return false;
         if (key.leftArrow || key.rightArrow) return false;
         return true; // eat everything else while completion is open
-      });
-    } else {
-      inputStack.pop('completion');
-    }
-  }, [completionSvc.isOpen]);
+      },
+    });
+  }, []);
 
-  // Prompt handler
+  // Prompt handler — registered once, when-condition gates activation
   const [promptValue, setPromptValue] = useState('');
   const [promptCursor, setPromptCursor] = useState(0);
   const promptValueRef = useRef(promptValue);
@@ -467,15 +477,11 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
   const promptCursorRef = useRef(promptCursor);
   promptCursorRef.current = promptCursor;
   useEffect(() => {
-    if (promptSvc.isOpen) {
-      // Reset cursor when prompt opens (with default value if any)
-      const defVal = promptSvc.state?.defaultValue ?? '';
-      if (defVal) {
-        setPromptCursor(defVal.length);
-      } else {
-        setPromptCursor(0);
-      }
-      inputStack.push('prompt', (_input: string, key: Key) => {
+    host.inputHandlers.register({
+      id: 'prompt',
+      priority: 60,
+      when: 'focus==prompt',
+      handle(_input: string, key: Key) {
         if (key.escape) { promptSvc.close(); return true; }
         if (key.return || _input === '\r') {
 
@@ -530,15 +536,24 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
           });
         }
         return true;
-      });
-    } else {
-      inputStack.pop('prompt');
+      },
+    });
+  }, []);
+
+  // Reset prompt cursor when default value is set on open
+  useEffect(() => {
+    if (promptSvc.isOpen) {
+      const defVal = promptSvc.state?.defaultValue ?? '';
+      setPromptCursor(defVal ? defVal.length : 0);
     }
   }, [promptSvc.isOpen]);
 
-  // Mode transition handler (a / v keys)
+  // Mode transition handler — registered once, always active (no when)
   useEffect(() => {
-    inputStack.push('mode-transition', (_input: string, key: Key) => {
+    host.inputHandlers.register({
+      id: 'mode-transition',
+      priority: 5,
+      handle(_input: string, key: Key) {
       if (key.escape) {
         if (showPalette) { setShowPalette(false); return true; }
         if (modeSvc.mode === 'normal') {
@@ -561,18 +576,22 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
         if (modeSvc.tryTransition(_input)) return true;
       }
       return false;
+      },
     });
   }, []);
 
-  // Register editor handler (from EditorPanel)
-  // Depend on stable push/pop methods, NOT the inputStack object (which is recreated each render).
-  // Otherwise the editor effect re-runs every render, pushing 'editor' above 'completion'.
+  // Register editor handler (from EditorPanel) — delegates to InputHandlerRegistry
   const registerHandler = useCallback((id: string, fn: (input: string, key: Key) => boolean) => {
-    inputStack.push(id, fn);
-  }, [inputStack.push]);
+    host.inputHandlers.register({
+      id,
+      priority: 10,
+      when: 'focus==editor',
+      handle(input: string, key: Key) { return fn(input, key); },
+    });
+  }, []);
   const unregisterHandler = useCallback((id: string) => {
-    inputStack.pop(id);
-  }, [inputStack.pop]);
+    host.inputHandlers.unregister(id);
+  }, []);
 
   // ── useInput dispatch ──────────────────────────
   useInput((input, key) => {
@@ -582,62 +601,9 @@ export const App: React.FC<AppProps> = ({ mouseSink }) => {
       if (m) { const ev = parseSGRMouse(m); if (ev) setMouse(ev); }
       return;
     }
-    // Dispatch to input stack
-    inputStack.dispatch(input, key as unknown as Key);
+    // Dispatch via ContributionHost (priority-ordered, when-filtered)
+    host.dispatchInput(input, key as unknown as Key);
   });
-
-  // ── Effects: focus sync ─────────────────────────
-
-  // Auto-focus popups when they open
-  useLayoutEffect(() => {
-    if (menuSvc.isOpen) focusSvc.set('menu');
-  }, [menuSvc.isOpen]);
-  useLayoutEffect(() => {
-    if (notifySvc.hasActionable) focusSvc.set('notify');
-  }, [notifySvc.hasActionable]);
-  useLayoutEffect(() => {
-    if (promptSvc.isOpen) focusSvc.set('prompt');
-  }, [promptSvc.isOpen]);
-
-  // Restore focus when popups close — BUT only if no higher-priority popup is active.
-  // Priority: prompt > notify > menu > sidebar/editor.
-  // Without this check, menu close-restore can override prompt auto-focus
-  // when a menu action opens a prompt.
-
-  const prevMenuOpenRef = useRef(menuSvc.isOpen);
-  useLayoutEffect(() => {
-    const wasOpen = prevMenuOpenRef.current;
-    const isOpen = menuSvc.isOpen;
-    prevMenuOpenRef.current = isOpen;
-    if (wasOpen && !isOpen && focusSvc.current === 'menu') {
-      // Don't restore if a higher-priority popup is now open
-      if (!promptSvc.isOpen && !notifySvc.hasActionable) {
-        focusSvc.set(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
-      }
-    }
-  }, [menuSvc.isOpen, modeSvc.mode]);
-
-  const prevNotifyActionsRef = useRef(notifySvc.hasActionable);
-  useLayoutEffect(() => {
-    const hadActions = prevNotifyActionsRef.current;
-    const hasActions = notifySvc.hasActionable;
-    prevNotifyActionsRef.current = hasActions;
-    if (hadActions && !hasActions && focusSvc.current === 'notify') {
-      if (!promptSvc.isOpen) {
-        focusSvc.set(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
-      }
-    }
-  }, [notifySvc.hasActionable, modeSvc.mode]);
-
-  const prevPromptOpenRef = useRef(promptSvc.isOpen);
-  useLayoutEffect(() => {
-    const wasOpen = prevPromptOpenRef.current;
-    const isOpen = promptSvc.isOpen;
-    prevPromptOpenRef.current = isOpen;
-    if (wasOpen && !isOpen && focusSvc.current === 'prompt') {
-      focusSvc.set(modeSvc.mode === 'normal' ? 'sidebar' : 'editor');
-    }
-  }, [promptSvc.isOpen, modeSvc.mode]);
 
   // Mode label for rendering
   const mode = modeSvc.mode;

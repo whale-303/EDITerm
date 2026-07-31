@@ -3,9 +3,10 @@
  * Promise-based: open() returns a Promise that resolves on confirm/cancel.
  * Registered as DI singleton via TOKENS.PromptService.
  */
-import { register } from '../../core/di/container.js';
+import { register, getService } from '../../core/di/container.js';
 import { TOKENS } from '../../core/di/tokens.js';
 import type { IPromptService, PromptState, PromptOptions } from './iprompt-service.js';
+import type { ContributionHost } from '../../core/contributions/contribution-host.js';
 
 export type { PromptState, PromptOptions };
 
@@ -13,6 +14,29 @@ export class PromptService implements IPromptService {
   private _state: PromptState | null = null;
   private _resolve: ((value: string | null) => void) | null = null;
   private _listeners = new Set<() => void>();
+
+  constructor() {
+    try {
+      const self = this;
+      const host = getService<ContributionHost>(TOKENS.ContributionHost);
+      host.contextKeys.register({
+        resolve: (key: string) => {
+          if (key === 'prompt.isOpen') return self.isOpen ? 'true' : 'false';
+          return undefined;
+        },
+      });
+      host.popups.register({
+        id: 'prompt',
+        get isActive() { return self._state !== null; },
+        priority: 60,
+      });
+      host.focusTargets.register({
+        id: 'prompt',
+        isAvailable: () => self._state !== null,
+        order: 12,
+      });
+    } catch { /* ContributionHost not yet available */ }
+  }
 
   get isOpen(): boolean {
     return this._state !== null;

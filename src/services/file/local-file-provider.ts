@@ -146,25 +146,6 @@ export class LocalFileProvider implements IVFSProvider {
     const prefix = relPath.replace(/\/+$/, '');
     const result: FileEntry[] = [];
 
-    // ── ".." parent-directory entry ──────────────
-    // Full-filesystem:  /e/foo → .. = /e       (root / has no parent)
-    // Scoped workspace: /     → .. = scoped-parent  (navigate out of workspace)
-    if (prefix !== '') {
-      const parent = this.parentDir(prefix);
-      result.push({
-        name: '..',
-        path: parent ? `/${parent}` : '/',
-        isDirectory: true,
-      });
-    } else if (this._rootReal) {
-      // Scoped workspace root — provider-relative ".." resolves to parent dir
-      result.push({
-        name: '..',
-        path: '..',
-        isDirectory: true,
-      });
-    }
-
     for (const d of entries) {
       if (d.name.startsWith('.')) continue;
       result.push({

@@ -12,6 +12,7 @@ export const TOKENS = {
   ExtensionHost: Symbol('ExtensionHost'),
   EventBus: Symbol('EventBus'),
   ModeService: Symbol('ModeService'),
+  ContributionHost: Symbol('ContributionHost'),
 
   // ── services ──────────────────────────────────
   FileService: Symbol('FileService'),
